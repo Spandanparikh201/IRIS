@@ -1,0 +1,114 @@
+2025-12-07 11:50:45 => ----- NEW REQUEST -----
+2025-12-07 11:50:45 => RAW POST: Array
+(
+    [rfid] => CAC4312
+    [status] => OUT
+)
+
+2025-12-07 11:50:45 => RFID Received: CAC4312
+2025-12-07 11:50:45 => Student Found: Param Parekh (CE)
+2025-12-07 11:50:45 => LAST Timestamp = 2025-12-07 15:51:27
+2025-12-07 11:50:45 => Time Now = 11:50:45
+2025-12-07 11:50:45 => TimeDiff = -14442 seconds
+2025-12-07 11:50:45 => Duplicate Ignored! TimeDiff=-14442 < 20
+2025-12-07 11:50:58 => ----- NEW REQUEST -----
+2025-12-07 11:50:58 => RAW POST: Array
+(
+    [rfid] => 42152B2
+    [status] => IN
+)
+
+2025-12-07 11:50:58 => RFID Received: 42152B2
+2025-12-07 11:50:58 => Student Found: Nisarg Lakhlani (CE)
+2025-12-07 11:50:58 => LAST Timestamp = 2025-12-07 15:51:22
+2025-12-07 11:50:58 => Time Now = 11:50:58
+2025-12-07 11:50:58 => TimeDiff = -14424 seconds
+2025-12-07 11:50:58 => Duplicate Ignored! TimeDiff=-14424 < 20
+2025-12-07 11:51:20 => ----- NEW REQUEST -----
+2025-12-07 11:51:20 => RAW POST: Array
+(
+    [rfid] => E3D32BE2
+    [status] => IN
+)
+
+2025-12-07 11:51:20 => RFID Received: E3D32BE2
+2025-12-07 11:51:20 => Student Found: Spandan Parikh (CE)
+2025-12-07 11:51:20 => LAST Timestamp = 2025-12-07 15:50:27
+2025-12-07 11:51:20 => Time Now = 11:51:20
+2025-12-07 11:51:20 => TimeDiff = -14347 seconds
+2025-12-07 11:51:20 => Duplicate Ignored! TimeDiff=-14347 < 20
+2025-12-07 11:55:47 => ----- NEW REQUEST -----
+2025-12-07 11:55:47 => RAW POST: Array
+(
+    [rfid] => 42152B2
+    [status] => IN
+)
+
+2025-12-07 11:55:47 => RFID Received: 42152B2
+2025-12-07 11:55:47 => Student Found: Nisarg Lakhlani (CE)
+2025-12-07 11:55:47 => LAST Timestamp = 2025-12-07 15:51:22
+2025-12-07 11:55:47 => Time Now = 11:55:47
+2025-12-07 11:55:47 => TimeDiff = -14135 seconds
+2025-12-07 11:55:47 => Duplicate Ignored! TimeDiff=-14135 < 20
+2025-12-07 12:00:13 => ----- NEW REQUEST -----
+2025-12-07 12:00:13 => RAW POST: Array
+(
+    [rfid] => E3D32BE2
+    [status] => IN
+)
+
+2025-12-07 12:00:13 => RFID Received: E3D32BE2
+2025-12-07 12:00:13 => Student Found: Spandan Parikh (CE)
+2025-12-07 12:00:13 => LAST Timestamp = 2025-12-07 15:50:27
+2025-12-07 12:00:13 => Time Now = 12:00:13
+2025-12-07 12:00:13 => TimeDiff = -13814 seconds
+2025-12-07 12:00:13 => Duplicate Ignored! TimeDiff=-13814 < 20
+2025-12-07 12:01:08 => ----- NEW REQUEST -----
+2025-12-07 12:01:08 => RAW POST: Array
+(
+)
+
+2025-12-07 12:01:34 => ----- NEW REQUEST -----
+2025-12-07 12:01:34 => RAW POST: Array
+(
+    [rfid] => E3D32BE2
+    [status] => IN
+)
+
+2025-12-07 12:01:34 => RFID Received: E3D32BE2
+2025-12-07 12:01:34 => Student Found: Spandan Parikh (CE)
+2025-12-07 12:01:34 => LAST Timestamp = 2025-12-07 15:50:27
+2025-12-07 12:01:34 => Time Now = 12:01:34
+2025-12-07 12:01:34 => TimeDiff = -13733 seconds
+2025-12-07 12:01:34 => Duplicate Ignored! TimeDiff=-13733 < 20
+2025-12-07 12:01:37 => ----- NEW REQUEST -----
+2025-12-07 12:01:37 => RAW POST: Array
+(
+)
+
+2025-12-07 12:01:40 => ----- NEW REQUEST -----
+2025-12-07 12:01:40 => RAW POST: Array
+(
+    [rfid] => E3D32BE2
+    [status] => IN
+)
+
+2025-12-07 12:01:40 => RFID Received: E3D32BE2
+2025-12-07 12:01:40 => Student Found: Spandan Parikh (CE)
+2025-12-07 12:01:40 => LAST Timestamp = 2025-12-07 15:50:27
+2025-12-07 12:01:40 => Time Now = 12:01:40
+2025-12-07 12:01:40 => TimeDiff = -13727 seconds
+2025-12-07 12:01:40 => Duplicate Ignored! TimeDiff=-13727 < 20
+2025-12-07 12:01:46 => ----- NEW REQUEST -----
+2025-12-07 12:01:46 => RAW POST: Array
+(
+    [rfid] => E3D32BE2
+    [status] => IN
+)
+
+2025-12-07 12:01:46 => RFID Received: E3D32BE2
+2025-12-07 12:01:46 => Student Found: Spandan Parikh (CE)
+2025-12-07 12:01:46 => LAST Timestamp = 2025-12-07 15:50:27
+2025-12-07 12:01:46 => Time Now = 12:01:46
+2025-12-07 12:01:46 => TimeDiff = -13721 seconds
+2025-12-07 12:01:46 => Duplicate Ignored! TimeDiff=-13721 < 20

@@ -39,10 +39,10 @@ if ($_POST && isset($_POST['send_email'])) {
                 .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
                 .header h1 { margin: 0; font-size: 24px; }
                 .header p { margin: 5px 0 0 0; opacity: 0.9; }
-                .content { padding: 30px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th { background: #4a5568; color: white; padding: 12px; text-align: left; }
-                td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+                .content { padding: 30px; text-align: center; }
+                table { width: 100%; border-collapse: collapse; margin: 20px auto; }
+                th { background: #4a5568; color: white; padding: 12px; text-align: center; }
+                td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: center; }
                 tr:nth-child(even) { background: #f7fafc; }
                 .status-in { color: #22543d; font-weight: bold; }
                 .status-out { color: #742a2a; font-weight: bold; }
