@@ -1,7 +1,7 @@
 <?php
 session_start();
 header("Content-Type: application/json");
-date_default_timezone_set('Asia/Kolkata'); // Ensure correct server timezone
+date_default_timezone_set('Asia/Kolkata');
 include 'db_connect.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -10,23 +10,21 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $rfid = $_POST['rfid'] ?? '';
-$action = $_POST['action'] ?? 'TOGGLE'; // Future-proofing
-
 if (empty($rfid)) {
     echo json_encode(["success" => false, "message" => "Missing RFID"]);
     exit;
 }
 
-// --------- Config ----------
-$DUPLICATE_INTERVAL = 5;  // 5 seconds minimum before toggle
+// Duplicate interval (seconds)
+$DUPLICATE_INTERVAL = 20;
 
-// -------- Fetch Student Info ----------
+// ---------------- Fetch Student ----------------
 $stmt = $conn->prepare("SELECT name, department FROM students WHERE rfid = ?");
 $stmt->bind_param("s", $rfid);
 $stmt->execute();
 $res = $stmt->get_result();
 
-if ($res->num_rows === 0) {
+if ($res->num_rows == 0) {
     echo json_encode(["success" => false, "message" => "Student not found"]);
     exit;
 }
@@ -35,50 +33,76 @@ $student = $res->fetch_assoc();
 $name = $student['name'];
 $department = $student['department'];
 
-// -------- Fetch Last Attendance ----------
-$check = $conn->prepare("SELECT status, timestamp FROM attendance WHERE rfid = ? ORDER BY id DESC LIMIT 1");
+// ---------------- Get Last Scan ----------------
+$check = $conn->prepare("SELECT status, timestamp 
+                         FROM attendance 
+                         WHERE rfid = ? 
+                         ORDER BY id DESC LIMIT 1");
 $check->bind_param("s", $rfid);
 $check->execute();
 $last = $check->get_result()->fetch_assoc();
 
 $currentTime = time();
-$status = "IN"; // default first scan
+$status = "IN"; // first scan default
 
 if ($last) {
     $lastStatus = $last['status'];
     $lastTime = strtotime($last['timestamp']);
-    $timeDiff = max(0, $currentTime - $lastTime); // Protect negative difference
+    $timeDiff = $currentTime - $lastTime;
 
-    // If within duplicate interval → ignore toggle
+    // If duplicate
     if ($timeDiff < $DUPLICATE_INTERVAL) {
         echo json_encode([
             "success" => false,
             "message" => "Duplicate scan ignored",
-            "debug" => "TimeDiff=$timeDiff < $DUPLICATE_INTERVAL"
+            "rfid" => $rfid,
+            "name" => $name,
+            "status" => $lastStatus
         ]);
         exit;
     }
 
-    // Toggle status after allowed interval
+    // Toggle status normally
     $status = ($lastStatus === "IN") ? "OUT" : "IN";
 }
 
-// -------- Insert Attendance ----------
-$insert = $conn->prepare("INSERT INTO attendance (rfid, name, department, status) VALUES (?, ?, ?, ?)");
+// ---------------- Insert New Attendance Entry ----------------
+$insert = $conn->prepare("INSERT INTO attendance (rfid, name, department, status) 
+                          VALUES (?, ?, ?, ?)");
 $insert->bind_param("ssss", $rfid, $name, $department, $status);
 
 if (!$insert->execute()) {
-    echo json_encode(["success" => false, "message" => "DB insert failed"]);
+    echo json_encode(["success" => false, "message" => "Insert failed"]);
     exit;
 }
 
-// -------- API Response ----------
+// ---------------- Calculate Current IN Students (CORRECT) ----------------
+$countSQL = "
+    SELECT COUNT(*) AS total_in
+    FROM (
+        SELECT rfid,
+               (SELECT status 
+                FROM attendance a2 
+                WHERE a2.rfid = a1.rfid 
+                ORDER BY id DESC LIMIT 1) AS last_status
+        FROM attendance a1
+        GROUP BY rfid
+    ) AS t
+    WHERE last_status = 'IN'
+";
+
+$countResult = $conn->query($countSQL);
+$currentIn = $countResult->fetch_assoc()['total_in'] ?? 0;
+
+// ---------------- Final Response ----------------
 echo json_encode([
     "success" => true,
     "message" => "$status recorded",
     "rfid" => $rfid,
     "name" => $name,
     "department" => $department,
-    "status" => $status
+    "status" => $status,
+    "current_in_count" => $currentIn
 ]);
+
 ?>
