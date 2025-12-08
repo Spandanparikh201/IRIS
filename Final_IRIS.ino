@@ -5,15 +5,15 @@
 #include <LCD-I2C.h>
 #include <Adafruit_MQTT.h>
 #include <Adafruit_MQTT_Client.h>
-#include <Arduino_JSON.h>   // Using Arduino_JSON
+#include <Arduino_JSON.h>
 
 // --- Pins ---
 #define SS_PIN 5
 #define RST_PIN 4
 
 // --- WiFi ---
-const char* ssid = "..";
-const char* password = "..";
+const char* ssid = "Realme 12+ 5G";
+const char* password = "spandy2206";
 
 // --- Server APIs ---
 const char* serverName = "http://10.188.15.79/IRIS/rfid_api.php";
@@ -23,7 +23,7 @@ const char* emailAPI   = "http://10.188.15.79/IRIS/send_email.php";
 #define AIO_SERVER     "io.adafruit.com"
 #define AIO_SERVERPORT 1883
 #define AIO_USERNAME   "Spandan_Parikh"
-#define AIO_KEY        ".."
+#define AIO_KEY        ""
 
 WiFiClient client;
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
@@ -36,15 +36,14 @@ String lastScannedTag = "";
 int scanCount = 0;
 
 // ------------------- Duplicate scan tracking -------------------
-#define MAX_TAGS 40
-String scannedTags[MAX_TAGS];           // store recent RFID tags
-unsigned long lastScanTime[MAX_TAGS];   // store last scan time in millis()
-const unsigned long DUPLICATE_INTERVAL = 20000; // 20 sec
+#define MAX_TAGS 20
+String scannedTags[MAX_TAGS];
+unsigned long lastScanTime[MAX_TAGS];
+const unsigned long MIN_INTERVAL = 5000;   // 5 seconds
 
-// ---------------- Email scheduling (1 hour) ----------------
-const unsigned long EMAIL_INTERVAL = 3600000UL; // 1 hour in milliseconds
-unsigned long emailTimerStart = 0;
-bool emailScheduled = false;
+// ---------------- Email Timer -----------------
+unsigned long lastEmailTime = 0;
+const unsigned long EMAIL_INTERVAL = 3600000; // 1 hour
 
 // ---------------- WiFi Connect ----------------
 void connectWiFi() {
@@ -70,55 +69,34 @@ void connectMQTT() {
   }
 }
 
-// ------------- Send RFID to Database & get Name + Status (Server decides) ----------
-/*
-  Option B behavior:
-  - POST only 'rfid' to server
-  - Server returns JSON: { "success": true, "name": "John Doe", "status": "IN" }
-  - We return studentName and set statusOut by reference
-*/
-String sendToDatabase(String rfidTag, String &statusOut) {
+// ------------- Send RFID to Database & get Name ----------
+// Note: status is now updated from server response
+String sendToDatabase(String rfidTag, String &status) {
   String studentName = "";
-  statusOut = "";
-
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     http.begin(serverName);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    String postData = "rfid=" + rfidTag; // server decides status
+    String postData = "rfid=" + rfidTag + "&status=" + status;
     int httpResponseCode = http.POST(postData);
 
     if (httpResponseCode > 0) {
       String response = http.getString();
       Serial.println("DB Response: " + response);
 
-      // Parse JSON using Arduino_JSON
       JSONVar jsonObj = JSON.parse(response);
-      if (JSON.typeof(jsonObj) == "undefined") {
-        Serial.println("Parsing failed!");
-      } else {
-        bool success = false;
-        if (jsonObj.hasOwnProperty("success")) {
-          success = (bool)jsonObj["success"];
-        }
+      if (JSON.typeof(jsonObj) != "undefined") {
+        bool success = (bool)jsonObj["success"];
         if (success) {
-          if (jsonObj.hasOwnProperty("name")) {
-            studentName = (const char*)jsonObj["name"];
-          }
-          if (jsonObj.hasOwnProperty("status")) {
-            statusOut = String((const char*)jsonObj["status"]);
-            statusOut.toUpperCase();
-          }
+          studentName = (const char*)jsonObj["name"];
+          status = (const char*)jsonObj["status"];  // <-- get server status
         } else {
-          // server returned an error (could be duplicate or other)
-          if (jsonObj.hasOwnProperty("message")) {
-            Serial.println(String("Server Message: ") + (const char*)jsonObj["message"]);
-          } else {
-            Serial.println("Server returned success=false");
-          }
-          studentName = "";
+          Serial.println(String("Server Message: ") + (const char*)jsonObj["message"]);
+          return "";
         }
+      } else {
+        Serial.println("Parsing failed!");
       }
     } else {
       Serial.println("DB Error: " + String(httpResponseCode));
@@ -128,7 +106,6 @@ String sendToDatabase(String rfidTag, String &statusOut) {
   } else {
     Serial.println("WiFi not connected.");
   }
-
   return studentName;
 }
 
@@ -141,7 +118,7 @@ void sendRFIDData(String data) {
   }
 }
 
-// ------------- Trigger Email API -------------
+// ---------------- Trigger Email API ----------------
 void sendEmailReport() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -154,8 +131,6 @@ void sendEmailReport() {
       Serial.println("Email Trigger Failed: " + String(httpCode));
     }
     http.end();
-  } else {
-    Serial.println("Cannot send email: WiFi not connected.");
   }
 }
 
@@ -168,88 +143,67 @@ void readRFID() {
     rfidTag += String(mfrc522.uid.uidByte[i], HEX);
   }
   rfidTag.toUpperCase();
-
   Serial.println("RFID: " + rfidTag);
 
-  // ------------------ Check 20-second duplicate ------------------
   unsigned long currentMillis = millis();
-  bool isDuplicate = false;
-
   int index = -1;
   for (int i = 0; i < MAX_TAGS; i++) {
     if (scannedTags[i] == rfidTag) {
       index = i;
-      if (currentMillis - lastScanTime[i] < DUPLICATE_INTERVAL) {
-        isDuplicate = true;
-      }
       break;
     }
   }
 
-  if (isDuplicate) {
-    Serial.println("Duplicate scan ignored (within 20s).");
-    return;
-  }
+  String status = "IN"; // initial placeholder, will be overwritten by API
 
-  // Update or add the tag in the array
-  if (index == -1) {
-    // find empty slot or use LRU replacement (simple approach: first empty)
+  if (index != -1) {
+    unsigned long timeDiff = currentMillis - lastScanTime[index];
+    if (timeDiff < MIN_INTERVAL) {
+      Serial.println("Scan ignored: wait 5 seconds for duplicate");
+      return;
+    }
+    lastScanTime[index] = currentMillis;
+  } else {
     for (int i = 0; i < MAX_TAGS; i++) {
       if (scannedTags[i] == "") {
         scannedTags[i] = rfidTag;
         lastScanTime[i] = currentMillis;
-        index = i;
         break;
       }
     }
-    // if still -1 (no empty slots), overwrite the oldest
-    if (index == -1) {
-      int oldestIdx = 0;
-      unsigned long oldestTime = lastScanTime[0];
-      for (int i = 1; i < MAX_TAGS; i++) {
-        if (lastScanTime[i] < oldestTime) {
-          oldestTime = lastScanTime[i];
-          oldestIdx = i;
-        }
-      }
-      scannedTags[oldestIdx] = rfidTag;
-      lastScanTime[oldestIdx] = currentMillis;
-      index = oldestIdx;
-    }
-  } else {
-    lastScanTime[index] = currentMillis; // update existing
   }
 
-  // ----------------- Server decides status & name -----------------
-  String status = "";
+  // --------- Send to DB and get Student Name & correct status ----------
   String studentName = sendToDatabase(rfidTag, status);
 
-  // If server returned no studentName (error / duplicate), don't update display or count
-  if (studentName == "" || status == "") {
-    // do not increment scanCount; already printed server message in sendToDatabase
-    return;
+  if (studentName == "") {
+    studentName = rfidTag;
+    Serial.println("API failed, showing UID on LCD.");
+  } else {
+    Serial.println("Student Name from API: " + studentName);
+    Serial.println("Status from API: " + status);  // <-- confirmed accurate
   }
 
-  // Schedule email if not already scheduled (first successful scan)
-  if (!emailScheduled) {
-    emailTimerStart = millis();
-    emailScheduled = true;
-    Serial.println("Email scheduled to be sent in 1 hour.");
+  // --------- Update Scan Count ----------
+  if (status == "IN") {
+    scanCount++;
+  } else {
+    if (scanCount > 0) scanCount--;
   }
 
-  // Send to Adafruit IO
+  // --------- Send to Adafruit IO ----------
   sendRFIDData(rfidTag + " - " + status);
 
-  // --- LCD Output (smooth) ---
+  // --------- LCD Output ----------
   lcd.setCursor(0, 0);
-  lcd.print("                ");  // clear line 1
+  lcd.print("                ");
   lcd.setCursor(0, 0);
   lcd.print(status + ": " + studentName);
 
   lcd.setCursor(0, 1);
   lcd.print("Scan Count:      ");
   lcd.setCursor(12, 1);
-  lcd.print(++scanCount);
+  lcd.print(scanCount);
 
   lastScannedTag = rfidTag;
 
@@ -272,33 +226,20 @@ void setup() {
 
   connectWiFi();
   connectMQTT();
-
-  // init scannedTags times to 0 to avoid garbage
-  for (int i = 0; i < MAX_TAGS; i++) {
-    scannedTags[i] = "";
-    lastScanTime[i] = 0;
-  }
+  lastEmailTime = millis();
 }
 
 // ----------------- Loop ----------------------
 void loop() {
-  // MQTT reconnect / process
   if (!mqtt.connected()) connectMQTT();
   mqtt.processPackets(10);
 
-  // Handle RFID reads
   readRFID();
 
-  // Email timer check
-  if (emailScheduled) {
-    unsigned long now = millis();
-    if (now - emailTimerStart >= EMAIL_INTERVAL) {
-      Serial.println("1 hour elapsed — sending email report...");
-      sendEmailReport();
-      emailScheduled = false; // reset; next scheduling will happen after next successful scan
-    }
+  if (millis() - lastEmailTime >= EMAIL_INTERVAL) {
+    sendEmailReport();
+    lastEmailTime = millis();
   }
 
-  delay(300);
+  delay(500);
 }
-x
