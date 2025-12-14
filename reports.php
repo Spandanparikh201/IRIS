@@ -18,36 +18,7 @@ include 'db_connect.php';
 // 🔧 TIMEZONE FIX (MySQL session)
 $conn->query("SET time_zone = '+05:30'");
 
-// Handle AJAX preview requests
-if (isset($_GET['preview'])) {
-    $reportType = $_GET['report'] ?? 'daily';
-    $chartData = [];
-    
-    switch($reportType) {
-        case 'daily':
-            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance WHERE DATE(timestamp) = CURDATE() GROUP BY status");
-            break;
-        case 'weekly':
-            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance WHERE YEARWEEK(timestamp, 1) = YEARWEEK(CURDATE(), 1) GROUP BY status");
-            break;
-        case 'monthly':
-            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance WHERE MONTH(timestamp) = MONTH(CURDATE()) GROUP BY status");
-            break;
-        case 'department':
-            $result = $conn->query("SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN attendance a ON d.dept_code = a.department GROUP BY d.id ORDER BY d.dept_name");
-            break;
-        default:
-            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance GROUP BY status LIMIT 10");
-    }
-    
-    while($row = $result->fetch_assoc()) {
-        $chartData[] = $row;
-    }
-    
-    header('Content-Type: application/json');
-    echo json_encode($chartData);
-    exit;
-}
+
 
 // Get departments from departments table
 $deptQuery = "SELECT dept_code, dept_name FROM departments WHERE status = 'active' ORDER BY dept_name";
@@ -60,37 +31,53 @@ while($row = $deptResult->fetch_assoc()) {
 }
 
 if (isset($_GET['report']) && isset($_GET['format'])) {
-    $reportType = $_GET['report'];
+    // Parse report type - handle cases like "department&dept=CE"
+    $reportParts = explode('&', $_GET['report']);
+    $reportType = $reportParts[0];
     $format = $_GET['format'];
     
+    // Parse additional parameters from report string
+    if (count($reportParts) > 1) {
+        for ($i = 1; $i < count($reportParts); $i++) {
+            $param = explode('=', $reportParts[$i]);
+            if (count($param) == 2) {
+                $_GET[$param[0]] = urldecode($param[1]);
+            }
+        }
+    }
+    
+    $result = null;
     switch($reportType) {
         case 'daily':
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = CURDATE() ORDER BY a.timestamp DESC";
+            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = CURDATE() ORDER BY a.timestamp DESC";
+            $result = $conn->query($sql);
             break;
         case 'weekly':
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(CURDATE(), 1) ORDER BY a.timestamp DESC";
+            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(CURDATE(), 1) ORDER BY a.timestamp DESC";
+            $result = $conn->query($sql);
             break;
         case 'monthly':
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(CURDATE()) ORDER BY a.timestamp DESC";
+            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(CURDATE()) ORDER BY a.timestamp DESC";
+            $result = $conn->query($sql);
             break;
         case 'department':
             $dept = $_GET['dept'] ?? '';
             if ($dept) {
-                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
+                $sql = "SELECT a.name, s.roll_number, s.department, d.dept_name, a.status, a.timestamp 
                        FROM attendance a 
                        LEFT JOIN students s ON a.rfid = s.rfid 
-                       LEFT JOIN departments d ON a.department = d.dept_code 
-                       WHERE a.department = ? 
+                       LEFT JOIN departments d ON s.department = d.dept_code 
+                       WHERE s.department = ? 
                        ORDER BY a.timestamp DESC";
                 $stmt = $conn->prepare($sql);
                 $stmt->bind_param('s', $dept);
                 $stmt->execute();
                 $result = $stmt->get_result();
             } else {
-                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
+                $sql = "SELECT a.name, s.roll_number, s.department, d.dept_name, a.status, a.timestamp 
                        FROM attendance a 
                        LEFT JOIN students s ON a.rfid = s.rfid 
-                       LEFT JOIN departments d ON a.department = d.dept_code 
+                       LEFT JOIN departments d ON s.department = d.dept_code 
                        ORDER BY d.dept_name, a.timestamp DESC";
                 $result = $conn->query($sql);
             }
@@ -115,7 +102,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 $types .= 's';
             }
             if ($dept) {
-                $where[] = "a.department = ?";
+                $where[] = "s.department = ?";
                 $params[] = $dept;
                 $types .= 's';
             }
@@ -125,10 +112,10 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 $params[] = $student;
                 $types .= 's';
                 $whereClause = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-                $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid$whereClause ORDER BY a.timestamp DESC";
+                $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid$whereClause ORDER BY a.timestamp DESC";
             } else {
                 $whereClause = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-                $sql = "SELECT a.name, s.roll_number, a.department, COUNT(*) as total_attendance FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid$whereClause GROUP BY a.rfid ORDER BY a.name";
+                $sql = "SELECT a.name, s.roll_number, s.department, COUNT(*) as total_attendance FROM attendance a INNER JOIN students s ON a.rfid = s.rfid$whereClause GROUP BY a.rfid ORDER BY a.name";
             }
             
             if ($params) {
@@ -140,67 +127,21 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 $result = $conn->query($sql);
             }
             break;
-        case 'custom':
         default:
-            $dateFrom = $_GET['date_from'] ?? '';
-            $dateTo = $_GET['date_to'] ?? '';
-            $dept = $_GET['dept'] ?? '';
-            $student = $_GET['student'] ?? '';
-            $status = $_GET['status'] ?? '';
-            $where = [];
-            $params = [];
-            $types = '';
-            
-            if ($dateFrom) {
-                $where[] = "DATE(a.timestamp) >= ?";
-                $params[] = $dateFrom;
-                $types .= 's';
-            }
-            if ($dateTo) {
-                $where[] = "DATE(a.timestamp) <= ?";
-                $params[] = $dateTo;
-                $types .= 's';
-            }
-            if ($dept) {
-                $where[] = "a.department = ?";
-                $params[] = $dept;
-                $types .= 's';
-            }
-            if ($student) {
-                $where[] = "s.roll_number = ?";
-                $params[] = $student;
-                $types .= 's';
-            }
-            if ($status) {
-                $where[] = "a.status = ?";
-                $params[] = $status;
-                $types .= 's';
-            }
-            
-            $whereClause = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid$whereClause ORDER BY a.timestamp DESC LIMIT 100";
-            
-            if ($params) {
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param($types, ...$params);
-                $stmt->execute();
-                $result = $stmt->get_result();
-            } else {
-                $result = $conn->query($sql);
-            }
+            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid ORDER BY a.timestamp DESC LIMIT 100";
+            $result = $conn->query($sql);
             break;
     }
     
-    // Handle result based on report type
-    if (!isset($result)) {
-        $result = $conn->query($sql);
-        if (!$result) {
-            die("SQL Error: " . $conn->error . "<br>Query: " . $sql);
-        }
-    }
+
     
     $data = [];
-    while($row = $result->fetch_assoc()) { $data[] = $row; }
+    if ($result) {
+        while($row = $result->fetch_assoc()) { $data[] = $row; }
+    } else {
+        error_log("Query failed: " . $conn->error);
+        die("Database query failed");
+    }
     
     if ($format == 'excel') {
         header('Content-Type: text/csv');
@@ -230,7 +171,12 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         // Prepare chart data
         $chartData = [];
         if ($reportType == 'department') {
-            $chartQuery = "SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN attendance a ON d.dept_code = a.department GROUP BY d.id ORDER BY d.dept_name";
+            $dept = $_GET['dept'] ?? '';
+            if ($dept) {
+                $chartQuery = "SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN students s ON d.dept_code = s.department LEFT JOIN attendance a ON s.rfid = a.rfid WHERE d.dept_code = '$dept' GROUP BY d.id ORDER BY d.dept_name";
+            } else {
+                $chartQuery = "SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN students s ON d.dept_code = s.department LEFT JOIN attendance a ON s.rfid = a.rfid GROUP BY d.id ORDER BY d.dept_name";
+            }
             $chartResult = $conn->query($chartQuery);
             while($row = $chartResult->fetch_assoc()) {
                 $chartData[] = $row;
@@ -269,7 +215,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             <h1><?= ucfirst($reportType) ?> Attendance Report</h1>
             <p>Generated on: <?= date('d M Y h:i A') ?> IST</p>
             
-            <?php if (!empty($chartData)): ?>
+            <?php if (!empty($chartData) && ($_GET['chart'] ?? '1') === '1'): ?>
             <div class="summary-stats">
                 <?php 
                 $totalRecords = array_sum(array_column($chartData, 'count'));
@@ -324,18 +270,17 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 </tbody>
             </table>
             
-            <?php if (!empty($chartData)): ?>
+            <?php if (!empty($chartData) && ($_GET['chart'] ?? '1') === '1'): ?>
             <script>
                 const ctx = document.getElementById('reportChart').getContext('2d');
                 const chartData = <?= json_encode($chartData) ?>;
                 
-                <?php if ($reportType == 'department'): ?>
                 new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: chartData.map(item => item.dept_name),
+                        labels: chartData.map(item => item.dept_name || item.status + ' Status'),
                         datasets: [{
-                            label: 'Attendance Records',
+                            label: 'Records',
                             data: chartData.map(item => item.count),
                             backgroundColor: ['#667eea', '#764ba2', '#48bb78', '#38a169', '#ed8936', '#dd6b20', '#9f7aea', '#805ad5', '#38b2ac'],
                             borderColor: '#333',
@@ -345,36 +290,15 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                     options: {
                         responsive: true,
                         plugins: {
-                            title: { display: true, text: 'Department-wise Attendance' },
+                            title: { display: true, text: '<?= ucfirst($reportType) ?> Report Chart' },
                             legend: { display: false }
                         },
                         scales: {
                             y: { beginAtZero: true, title: { display: true, text: 'Number of Records' } },
-                            x: { title: { display: true, text: 'Departments' } }
+                            x: { title: { display: true, text: 'Categories' } }
                         }
                     }
                 });
-                <?php else: ?>
-                new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: chartData.map(item => item.status + ' Status'),
-                        datasets: [{
-                            data: chartData.map(item => item.count),
-                            backgroundColor: ['#48bb78', '#ed8936'],
-                            borderColor: '#fff',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            title: { display: true, text: '<?= ucfirst($reportType) ?> Attendance Distribution' },
-                            legend: { position: 'bottom' }
-                        }
-                    }
-                });
-                <?php endif; ?>
                 
                 // Auto-print after chart loads
                 setTimeout(() => window.print(), 1000);
@@ -523,27 +447,10 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
 <button onclick="showStudentDialog('student')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
             </div>
             
-            <div class="report-card">
-                <div class="report-icon"><i class="fas fa-file-excel"></i></div>
-                <h3>Custom Report</h3>
-                <p>Generate custom date range reports</p>
-                <br>
-<button onclick="showCustomDialog('custom')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
-            </div>
+
         </div>
         
-        <!-- Chart Preview Section -->
-        <div class="card" id="chartPreview" style="display: none;">
-            <h3>📊 Report Preview</h3>
-            <div style="display: flex; gap: 20px;">
-                <div style="flex: 1;">
-                    <canvas id="previewChart" width="400" height="200"></canvas>
-                </div>
-                <div style="flex: 1;">
-                    <div id="chartStats"></div>
-                </div>
-            </div>
-        </div>
+
 
     </div>
     
@@ -551,6 +458,11 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         <div class="modal-content">
             <h3><i class="fas fa-file-download"></i> Choose Download Format</h3>
             <p>Select the format for your report:</p>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="includeChart" checked> Include Chart in PDF
+                </label>
+            </div>
             <div class="modal-buttons">
                 <button onclick="generateReport('excel')" class="btn btn-primary">
                     <i class="fas fa-file-excel"></i> Excel
@@ -584,55 +496,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         </div>
     </div>
     
-    <div id="customModal" class="modal">
-        <div class="modal-content" style="width: 500px;">
-            <h3><i class="fas fa-calendar-alt"></i> Custom Report</h3>
-            <div class="form-group">
-                <label>From Date:</label>
-                <input type="date" id="dateFrom">
-            </div>
-            <div class="form-group">
-                <label>To Date:</label>
-                <input type="date" id="dateTo">
-            </div>
-            <div class="form-group">
-                <label>Department:</label>
-                <select id="customDept">
-                    <option value="">All Departments</option>
-                    <?php foreach($departments as $dept): ?>
-                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Student:</label>
-                <div class="searchable-select">
-                    <input type="text" id="customStudentSearch" class="search-input" placeholder="Search student by name..." onkeyup="searchCustomStudents()">
-                    <select id="customStudent">
-                        <option value="">All Students</option>
-                        <?php
-                        $students = $conn->query("SELECT roll_number, name, department FROM students ORDER BY name");
-                        while($student = $students->fetch_assoc()) {
-                            echo "<option value='{$student['roll_number']}' data-dept='{$student['department']}'>{$student['name']} ({$student['roll_number']}) - {$student['department']}</option>";
-                        }
-                        ?>
-                    </select>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Status:</label>
-                <select id="customStatus">
-                    <option value="">All Status</option>
-                    <option value="IN">IN</option>
-                    <option value="OUT">OUT</option>
-                </select>
-            </div>
-            <div class="modal-buttons">
-                <button onclick="proceedWithCustom()" class="btn btn-primary">Continue</button>
-                <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">Cancel</button>
-            </div>
-        </div>
-    </div>
+
     
     <div id="studentModal" class="modal">
         <div class="modal-content" style="width: 500px;">
@@ -689,75 +553,16 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         
         function showFormatDialog(reportType) {
             selectedReport = reportType;
-            loadChartPreview(reportType);
             document.getElementById('formatModal').style.display = 'block';
         }
         
-        function loadChartPreview(reportType) {
-            fetch(`?preview=1&report=${reportType}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        showChart(data, reportType);
-                        document.getElementById('chartPreview').style.display = 'block';
-                    }
-                })
-                .catch(error => console.log('Preview not available'));
-        }
+
         
-        function showChart(data, reportType) {
-            const ctx = document.getElementById('previewChart').getContext('2d');
-            
-            if (window.previewChartInstance) {
-                window.previewChartInstance.destroy();
-            }
-            
-            if (reportType === 'department') {
-                window.previewChartInstance = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: data.map(item => item.dept_name || item.department),
-                        datasets: [{
-                            label: 'Records',
-                            data: data.map(item => item.count),
-                            backgroundColor: '#667eea'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { title: { display: true, text: 'Department-wise Data' } }
-                    }
-                });
-            } else {
-                window.previewChartInstance = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: data.map(item => item.status + ' Status'),
-                        datasets: [{
-                            data: data.map(item => item.count),
-                            backgroundColor: ['#48bb78', '#ed8936']
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { title: { display: true, text: `${reportType} Distribution` } }
-                    }
-                });
-            }
-            
-            // Update stats
-            const total = data.reduce((sum, item) => sum + parseInt(item.count), 0);
-            document.getElementById('chartStats').innerHTML = `
-                <h4>📊 Statistics</h4>
-                <p><strong>Total Records:</strong> ${total}</p>
-                <p><strong>Categories:</strong> ${data.length}</p>
-            `;
-        }
+
         
         function closeModal() {
             document.getElementById('formatModal').style.display = 'none';
             document.getElementById('deptModal').style.display = 'none';
-            document.getElementById('customModal').style.display = 'none';
             document.getElementById('studentModal').style.display = 'none';
         }
         
@@ -766,10 +571,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             document.getElementById('deptModal').style.display = 'block';
         }
         
-        function showCustomDialog(reportType) {
-            selectedReport = reportType;
-            document.getElementById('customModal').style.display = 'block';
-        }
+
         
         function showStudentDialog(reportType) {
             selectedReport = reportType;
@@ -778,27 +580,16 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         
         function proceedWithDept() {
             const dept = document.getElementById('deptSelect').value;
-            selectedReport = dept ? `department&dept=${encodeURIComponent(dept)}` : 'department';
+            if (dept) {
+                selectedReport = `department&dept=${encodeURIComponent(dept)}`;
+            } else {
+                selectedReport = 'department';
+            }
             closeModal();
             showFormatDialog('');
         }
         
-        function proceedWithCustom() {
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
-            const dept = document.getElementById('customDept').value;
-            const student = document.getElementById('customStudent').value;
-            const status = document.getElementById('customStatus').value;
-            let params = [];
-            if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
-            if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
-            if (dept) params.push(`dept=${encodeURIComponent(dept)}`);
-            if (student) params.push(`student=${encodeURIComponent(student)}`);
-            if (status) params.push(`status=${encodeURIComponent(status)}`);
-            selectedReport = params.length ? `custom&${params.join('&')}` : 'custom';
-            closeModal();
-            showFormatDialog('');
-        }
+
         
         function proceedWithStudent() {
             const dateFrom = document.getElementById('studentDateFrom').value;
@@ -849,25 +640,14 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             }
         }
         
-        function searchCustomStudents() {
-            const searchTerm = document.getElementById('customStudentSearch').value.toLowerCase();
-            const studentSelect = document.getElementById('customStudent');
-            const options = studentSelect.getElementsByTagName('option');
-            
-            for (let i = 1; i < options.length; i++) {
-                const option = options[i];
-                const optionText = option.textContent.toLowerCase();
-                
-                if (optionText.includes(searchTerm)) {
-                    option.style.display = 'block';
-                } else {
-                    option.style.display = 'none';
-                }
-            }
-        }
+
         
         function generateReport(format) {
-            let url = `?report=${selectedReport}&format=${format}`;
+            let url = `?report=${encodeURIComponent(selectedReport)}&format=${format}`;
+            if (format === 'pdf') {
+                const includeChart = document.getElementById('includeChart').checked;
+                url += `&chart=${includeChart ? '1' : '0'}`;
+            }
             if (format === 'excel') {
                 window.location.href = url;
             } else {
@@ -897,7 +677,6 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                             if (studentModal.style.display === 'block') {
                                 document.getElementById('studentSearch').value = '';
-                                document.getElementById('customStudentSearch').value = '';
                             }
                         }
                     });
@@ -907,7 +686,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         });
         
         window.onclick = function(event) {
-            const modals = ['formatModal', 'deptModal', 'customModal', 'studentModal'];
+            const modals = ['formatModal', 'deptModal', 'studentModal'];
             modals.forEach(modalId => {
                 const modal = document.getElementById(modalId);
                 if (event.target == modal) {
