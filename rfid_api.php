@@ -15,7 +15,7 @@ if (empty($rfid)) {
     exit;
 }
 
-// Duplicate interval (seconds)
+// Duplicate interval in seconds
 $DUPLICATE_INTERVAL = 20;
 
 // ---------------- Fetch Student ----------------
@@ -25,7 +25,11 @@ $stmt->execute();
 $res = $stmt->get_result();
 
 if ($res->num_rows == 0) {
-    echo json_encode(["success" => false, "message" => "Student not found"]);
+    echo json_encode([
+        "success" => false,
+        "message" => "Student not found",
+        "rfid" => $rfid
+    ]);
     exit;
 }
 
@@ -34,41 +38,46 @@ $name = $student['name'];
 $department = $student['department'];
 
 // ---------------- Get Last Scan ----------------
-$check = $conn->prepare("SELECT status, timestamp 
-                         FROM attendance 
-                         WHERE rfid = ? 
-                         ORDER BY id DESC LIMIT 1");
+$check = $conn->prepare("
+    SELECT status, timestamp 
+    FROM attendance 
+    WHERE rfid = ? 
+    ORDER BY id DESC LIMIT 1
+");
 $check->bind_param("s", $rfid);
 $check->execute();
 $last = $check->get_result()->fetch_assoc();
 
 $currentTime = time();
-$status = "IN"; // first scan default
+$status = "IN"; // default first scan
 
 if ($last) {
     $lastStatus = $last['status'];
     $lastTime = strtotime($last['timestamp']);
     $timeDiff = $currentTime - $lastTime;
 
-    // If duplicate
+    // ✔ Duplicate Scan Protection
     if ($timeDiff < $DUPLICATE_INTERVAL) {
         echo json_encode([
             "success" => false,
             "message" => "Duplicate scan ignored",
             "rfid" => $rfid,
             "name" => $name,
+            "department" => $department,
             "status" => $lastStatus
         ]);
         exit;
     }
 
-    // Toggle status normally
+    // ✔ Toggle IN/OUT
     $status = ($lastStatus === "IN") ? "OUT" : "IN";
 }
 
 // ---------------- Insert New Attendance Entry ----------------
-$insert = $conn->prepare("INSERT INTO attendance (rfid, name, department, status) 
-                          VALUES (?, ?, ?, ?)");
+$insert = $conn->prepare("
+    INSERT INTO attendance (rfid, name, department, status) 
+    VALUES (?, ?, ?, ?)
+");
 $insert->bind_param("ssss", $rfid, $name, $department, $status);
 
 if (!$insert->execute()) {
@@ -76,7 +85,7 @@ if (!$insert->execute()) {
     exit;
 }
 
-// ---------------- Calculate Current IN Students (CORRECT) ----------------
+// ---------------- Calculate Current IN Students ----------------
 $countSQL = "
     SELECT COUNT(*) AS total_in
     FROM (
@@ -94,7 +103,7 @@ $countSQL = "
 $countResult = $conn->query($countSQL);
 $currentIn = $countResult->fetch_assoc()['total_in'] ?? 0;
 
-// ---------------- Final Response ----------------
+// ---------------- Final API Response ----------------
 echo json_encode([
     "success" => true,
     "message" => "$status recorded",

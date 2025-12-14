@@ -1,8 +1,13 @@
 <?php
+// 🔧 TIMEZONE FIX (PHP)
+date_default_timezone_set('Asia/Kolkata');
+
 require 'vendor/autoload.php';
 use Dompdf\Dompdf;
 
 include 'db_connect.php';
+// 🔧 TIMEZONE FIX (MySQL session)
+$conn->query("SET time_zone = '+05:30'");
 
 $html = '
 <style>
@@ -19,7 +24,7 @@ $html = '
 </style>
 <div class="header">
     <h1>📊 Attendance Report</h1>
-    <p>Generated on ' . date('F d, Y h:i A') . '</p>
+    <p>Generated on ' . date('d M Y h:i A') . ' IST</p>
 </div>
 <table>
     <tr><th>Name</th><th>RFID</th><th>Department</th><th>Status</th><th>Timestamp</th></tr>';
@@ -32,7 +37,7 @@ while ($row = mysqli_fetch_assoc($result)) {
     <td>{$row['rfid']}</td>
     <td>{$row['department']}</td>
     <td class='{$statusClass}'>{$row['status']}</td>
-    <td>" . date('M d, Y h:i A', strtotime($row['timestamp'])) . "</td>
+    <td>" . date('M d, Y h:i A', strtotime($row['timestamp'])) . " IST</td>
   </tr>";
 }
 $html .= '</table>';

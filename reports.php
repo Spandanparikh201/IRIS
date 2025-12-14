@@ -1,5 +1,8 @@
 <?php
 session_start();
+// 🔧 TIMEZONE FIX (PHP)
+date_default_timezone_set('Asia/Kolkata');
+
 if (!isset($_SESSION['user'])) {
     header("Location: login.php");
     exit();
@@ -12,27 +15,49 @@ if (!in_array($_SESSION['user_role'], ['admin', 'teacher'])) {
 }
 
 include 'db_connect.php';
+// 🔧 TIMEZONE FIX (MySQL session)
+$conn->query("SET time_zone = '+05:30'");
 
-// Get departments from database
-$deptQuery = "SELECT DISTINCT department FROM students ORDER BY department";
-$deptResult = $conn->query($deptQuery);
-$departments = [];
-while($row = $deptResult->fetch_assoc()) {
-    $departments[] = $row['department'];
+// Handle AJAX preview requests
+if (isset($_GET['preview'])) {
+    $reportType = $_GET['report'] ?? 'daily';
+    $chartData = [];
+    
+    switch($reportType) {
+        case 'daily':
+            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance WHERE DATE(timestamp) = CURDATE() GROUP BY status");
+            break;
+        case 'weekly':
+            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance WHERE YEARWEEK(timestamp, 1) = YEARWEEK(CURDATE(), 1) GROUP BY status");
+            break;
+        case 'monthly':
+            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance WHERE MONTH(timestamp) = MONTH(CURDATE()) GROUP BY status");
+            break;
+        case 'department':
+            $result = $conn->query("SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN attendance a ON d.dept_code = a.department GROUP BY d.id ORDER BY d.dept_name");
+            break;
+        default:
+            $result = $conn->query("SELECT status, COUNT(*) as count FROM attendance GROUP BY status LIMIT 10");
+    }
+    
+    while($row = $result->fetch_assoc()) {
+        $chartData[] = $row;
+    }
+    
+    header('Content-Type: application/json');
+    echo json_encode($chartData);
+    exit;
 }
 
-// Department names mapping
-$deptNames = [
-    'CE' => 'Computer Engineering',
-    'IT' => 'Information Technology',
-    'ME' => 'Mechanical Engineering',
-    'EE' => 'Electrical Engineering',
-    'EC' => 'Electronics & Communication',
-    'CV' => 'Civil Engineering',
-    'CSE' => 'Computer Science Engineering',
-    'AI' => 'Artificial Intelligence',
-    'DS' => 'Data Science'
-];
+// Get departments from departments table
+$deptQuery = "SELECT dept_code, dept_name FROM departments WHERE status = 'active' ORDER BY dept_name";
+$deptResult = $conn->query($deptQuery);
+$departments = [];
+$deptNames = [];
+while($row = $deptResult->fetch_assoc()) {
+    $departments[] = $row['dept_code'];
+    $deptNames[$row['dept_code']] = $row['dept_name'];
+}
 
 if (isset($_GET['report']) && isset($_GET['format'])) {
     $reportType = $_GET['report'];
@@ -43,7 +68,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = CURDATE() ORDER BY a.timestamp DESC";
             break;
         case 'weekly':
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE WEEK(a.timestamp) = WEEK(CURDATE()) ORDER BY a.timestamp DESC";
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(CURDATE(), 1) ORDER BY a.timestamp DESC";
             break;
         case 'monthly':
             $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(CURDATE()) ORDER BY a.timestamp DESC";
@@ -51,13 +76,22 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         case 'department':
             $dept = $_GET['dept'] ?? '';
             if ($dept) {
-                $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE a.department = ? ORDER BY a.timestamp DESC";
+                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
+                       FROM attendance a 
+                       LEFT JOIN students s ON a.rfid = s.rfid 
+                       LEFT JOIN departments d ON a.department = d.dept_code 
+                       WHERE a.department = ? 
+                       ORDER BY a.timestamp DESC";
                 $stmt = $conn->prepare($sql);
                 $stmt->bind_param('s', $dept);
                 $stmt->execute();
                 $result = $stmt->get_result();
             } else {
-                $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid ORDER BY a.department, a.timestamp DESC";
+                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
+                       FROM attendance a 
+                       LEFT JOIN students s ON a.rfid = s.rfid 
+                       LEFT JOIN departments d ON a.department = d.dept_code 
+                       ORDER BY d.dept_name, a.timestamp DESC";
                 $result = $conn->query($sql);
             }
             break;
@@ -181,28 +215,84 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         } else {
             fputcsv($output, ['Name', 'Roll Number', 'Department', 'Status', 'Timestamp']);
             foreach($data as $row) {
-                fputcsv($output, [$row['name'], $row['roll_number'], $row['department'], $row['status'], $row['timestamp']]);
+                fputcsv($output, [
+                    $row['name'],
+                    $row['roll_number'],
+                    $row['department'],
+                    $row['status'],
+                    date('Y-m-d H:i:s', strtotime($row['timestamp'])) // IST
+                ]);
             }
         }
         fclose($output);
         exit;
     } elseif ($format == 'pdf') {
+        // Prepare chart data
+        $chartData = [];
+        if ($reportType == 'department') {
+            $chartQuery = "SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN attendance a ON d.dept_code = a.department GROUP BY d.id ORDER BY d.dept_name";
+            $chartResult = $conn->query($chartQuery);
+            while($row = $chartResult->fetch_assoc()) {
+                $chartData[] = $row;
+            }
+        } elseif (in_array($reportType, ['daily', 'weekly', 'monthly'])) {
+            $chartQuery = "SELECT a.status, COUNT(*) as count FROM attendance a WHERE ";
+            if ($reportType == 'daily') $chartQuery .= "DATE(a.timestamp) = CURDATE()";
+            elseif ($reportType == 'weekly') $chartQuery .= "YEARWEEK(a.timestamp, 1) = YEARWEEK(CURDATE(), 1)";
+            else $chartQuery .= "MONTH(a.timestamp) = MONTH(CURDATE())";
+            $chartQuery .= " GROUP BY a.status";
+            $chartResult = $conn->query($chartQuery);
+            while($row = $chartResult->fetch_assoc()) {
+                $chartData[] = $row;
+            }
+        }
         ?>
         <!DOCTYPE html>
         <html>
         <head>
             <title><?= ucfirst($reportType) ?> Report</title>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <style>
                 body { font-family: Arial, sans-serif; margin: 20px; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
                 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
                 th { background-color: #f2f2f2; }
                 h1 { color: #333; }
+                .chart-container { width: 100%; max-width: 600px; margin: 20px auto; }
+                .summary-stats { display: flex; gap: 20px; margin: 20px 0; }
+                .stat-box { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; flex: 1; }
+                .stat-number { font-size: 2rem; font-weight: bold; color: #667eea; }
+                .stat-label { color: #666; font-size: 0.9rem; }
             </style>
         </head>
         <body>
             <h1><?= ucfirst($reportType) ?> Attendance Report</h1>
-            <p>Generated on: <?= date('Y-m-d H:i:s') ?></p>
+            <p>Generated on: <?= date('d M Y h:i A') ?> IST</p>
+            
+            <?php if (!empty($chartData)): ?>
+            <div class="summary-stats">
+                <?php 
+                $totalRecords = array_sum(array_column($chartData, 'count'));
+                if ($reportType == 'department') {
+                    echo "<div class='stat-box'><div class='stat-number'>" . count($chartData) . "</div><div class='stat-label'>Departments</div></div>";
+                    echo "<div class='stat-box'><div class='stat-number'>$totalRecords</div><div class='stat-label'>Total Records</div></div>";
+                } else {
+                    $inCount = 0; $outCount = 0;
+                    foreach($chartData as $item) {
+                        if($item['status'] == 'IN') $inCount = $item['count'];
+                        if($item['status'] == 'OUT') $outCount = $item['count'];
+                    }
+                    echo "<div class='stat-box'><div class='stat-number'>$inCount</div><div class='stat-label'>IN Records</div></div>";
+                    echo "<div class='stat-box'><div class='stat-number'>$outCount</div><div class='stat-label'>OUT Records</div></div>";
+                    echo "<div class='stat-box'><div class='stat-number'>$totalRecords</div><div class='stat-label'>Total Records</div></div>";
+                }
+                ?>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="reportChart" width="400" height="200"></canvas>
+            </div>
+            <?php endif; ?>
             <table>
                 <thead>
                     <tr>
@@ -225,7 +315,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                         <td><?= htmlspecialchars($row['department']) ?></td>
                         <?php if($reportType != 'student' || isset($_GET['student'])): ?>
                         <td><?= $row['status'] ?></td>
-                        <td><?= date('M d, Y h:i A', strtotime($row['timestamp'])) ?></td>
+                        <td><?= date('M d, Y h:i A', strtotime($row['timestamp'])) ?> IST</td>
                         <?php else: ?>
                         <td><?= $row['total_attendance'] ?></td>
                         <?php endif; ?>
@@ -233,7 +323,65 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            
+            <?php if (!empty($chartData)): ?>
+            <script>
+                const ctx = document.getElementById('reportChart').getContext('2d');
+                const chartData = <?= json_encode($chartData) ?>;
+                
+                <?php if ($reportType == 'department'): ?>
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: chartData.map(item => item.dept_name),
+                        datasets: [{
+                            label: 'Attendance Records',
+                            data: chartData.map(item => item.count),
+                            backgroundColor: ['#667eea', '#764ba2', '#48bb78', '#38a169', '#ed8936', '#dd6b20', '#9f7aea', '#805ad5', '#38b2ac'],
+                            borderColor: '#333',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: { display: true, text: 'Department-wise Attendance' },
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, title: { display: true, text: 'Number of Records' } },
+                            x: { title: { display: true, text: 'Departments' } }
+                        }
+                    }
+                });
+                <?php else: ?>
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: chartData.map(item => item.status + ' Status'),
+                        datasets: [{
+                            data: chartData.map(item => item.count),
+                            backgroundColor: ['#48bb78', '#ed8936'],
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: { display: true, text: '<?= ucfirst($reportType) ?> Attendance Distribution' },
+                            legend: { position: 'bottom' }
+                        }
+                    }
+                });
+                <?php endif; ?>
+                
+                // Auto-print after chart loads
+                setTimeout(() => window.print(), 1000);
+            </script>
+            <?php else: ?>
             <script>window.print();</script>
+            <?php endif; ?>
         </body>
         </html>
         <?php
@@ -249,6 +397,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports - I.R.I.S</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
@@ -383,6 +532,18 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             </div>
         </div>
         
+        <!-- Chart Preview Section -->
+        <div class="card" id="chartPreview" style="display: none;">
+            <h3>📊 Report Preview</h3>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1;">
+                    <canvas id="previewChart" width="400" height="200"></canvas>
+                </div>
+                <div style="flex: 1;">
+                    <div id="chartStats"></div>
+                </div>
+            </div>
+        </div>
 
     </div>
     
@@ -412,7 +573,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 <select id="deptSelect">
                     <option value="">All Departments</option>
                     <?php foreach($departments as $dept): ?>
-                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?? $dept ?></option>
+                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -439,7 +600,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 <select id="customDept">
                     <option value="">All Departments</option>
                     <?php foreach($departments as $dept): ?>
-                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?? $dept ?></option>
+                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -489,7 +650,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 <select id="studentDept">
                     <option value="">All Departments</option>
                     <?php foreach($departments as $dept): ?>
-                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?? $dept ?></option>
+                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -528,7 +689,69 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         
         function showFormatDialog(reportType) {
             selectedReport = reportType;
+            loadChartPreview(reportType);
             document.getElementById('formatModal').style.display = 'block';
+        }
+        
+        function loadChartPreview(reportType) {
+            fetch(`?preview=1&report=${reportType}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        showChart(data, reportType);
+                        document.getElementById('chartPreview').style.display = 'block';
+                    }
+                })
+                .catch(error => console.log('Preview not available'));
+        }
+        
+        function showChart(data, reportType) {
+            const ctx = document.getElementById('previewChart').getContext('2d');
+            
+            if (window.previewChartInstance) {
+                window.previewChartInstance.destroy();
+            }
+            
+            if (reportType === 'department') {
+                window.previewChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(item => item.dept_name || item.department),
+                        datasets: [{
+                            label: 'Records',
+                            data: data.map(item => item.count),
+                            backgroundColor: '#667eea'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { title: { display: true, text: 'Department-wise Data' } }
+                    }
+                });
+            } else {
+                window.previewChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.map(item => item.status + ' Status'),
+                        datasets: [{
+                            data: data.map(item => item.count),
+                            backgroundColor: ['#48bb78', '#ed8936']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { title: { display: true, text: `${reportType} Distribution` } }
+                    }
+                });
+            }
+            
+            // Update stats
+            const total = data.reduce((sum, item) => sum + parseInt(item.count), 0);
+            document.getElementById('chartStats').innerHTML = `
+                <h4>📊 Statistics</h4>
+                <p><strong>Total Records:</strong> ${total}</p>
+                <p><strong>Categories:</strong> ${data.length}</p>
+            `;
         }
         
         function closeModal() {
