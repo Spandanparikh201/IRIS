@@ -12,17 +12,17 @@
 #define RST_PIN 4
 
 // --- WiFi ---
-const char* ssid = "Realme 12+ 5G";
-const char* password = "spandy2206";
+const char* ssid = "Your wifi name";
+const char* password = "your wifi password";
 
 // --- Server APIs ---
-const char* serverName = "http://10.188.15.79/IRIS/rfid_api.php";
-const char* emailAPI   = "http://10.188.15.79/IRIS/send_email.php";
+const char* serverName = "local ip/IRIS/rfid_api.php";
+const char* emailAPI   = "local ip/IRIS/send_email.php";
 
 // --- Adafruit IO ---
 #define AIO_SERVER     "io.adafruit.com"
-#define AIO_SERVERPORT 1883
-#define AIO_USERNAME   "Spandan_Parikh"
+#define AIO_SERVERPORT 
+#define AIO_USERNAME   "Username"
 #define AIO_KEY        ""
 
 WiFiClient client;
