@@ -1,8 +1,18 @@
 <?php
 session_start();
+
+// Set session timeout (30 minutes)
+if (isset($_SESSION['LAST_ACTIVITY']) && (time() - $_SESSION['LAST_ACTIVITY'] > 1800)) {
+    session_destroy();
+    header("Location: login.php?timeout=1");
+    exit(0);
+}
+$_SESSION['LAST_ACTIVITY'] = time();
+
 if (isset($_SESSION['user'])) {
+    // Redirect to main dashboard
     header("Location: dashboard.php");
-    exit();
+    exit(0);
 }
 ?>
 

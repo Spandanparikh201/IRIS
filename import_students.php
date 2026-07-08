@@ -42,6 +42,6 @@ if (isset($_POST['import']) && isset($_SESSION['csv_preview'])) {
     }
 
     echo "✅ Students imported successfully.";
-    echo "<br><a href='dashboard.php'>🔙 Back to Dashboard</a>";
+    echo "<br><a href='dashboard.php'>Back to Dashboard</a>";
 }
 ?>

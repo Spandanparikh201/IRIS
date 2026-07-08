@@ -1,0 +1,4 @@
+.planning/
+vendor/
+.env
+.phpunit.cache/

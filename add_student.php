@@ -2,24 +2,29 @@
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: login.php");
-    exit();
+    exit(0);
 }
 
 include 'db_connect.php';
+include 'rbac_helper.php';
 
 if ($_POST) {
     if (isset($_POST['single_add'])) {
         $name = $_POST['name'];
-        $roll_number = $_POST['roll_number'];
+        $year = $_POST['year'];
         $department = $_POST['department'];
+        $roll_no = $_POST['roll_no'];
         $email = $_POST['email'];
         $rfid = $_POST['rfid'];
+        
+        // Auto-generate roll number: 23CE198
+        $roll_number = $year . $department . str_pad($roll_no, 3, '0', STR_PAD_LEFT);
         
         $stmt = $conn->prepare("INSERT INTO students (name, roll_number, department, email, rfid) VALUES (?, ?, ?, ?, ?)");
         $stmt->bind_param("sssss", $name, $roll_number, $department, $email, $rfid);
         
         if ($stmt->execute()) {
-            $success = "Student added successfully!";
+            $success = "Student added successfully! Roll Number: " . $roll_number;
         } else {
             $error = "Error: " . $conn->error;
         }
@@ -27,18 +32,43 @@ if ($_POST) {
     
     if (isset($_POST['bulk_upload']) && isset($_FILES['csv_file'])) {
         $file = $_FILES['csv_file']['tmp_name'];
-        if (($handle = fopen($file, "r")) !== FALSE) {
-            $count = 0;
-            fgetcsv($handle); // Skip header row
-            while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-                $stmt = $conn->prepare("INSERT INTO students (name, roll_number, department, email, rfid) VALUES (?, ?, ?, ?, ?)");
-                $stmt->bind_param("sssss", $data[0], $data[1], $data[2], $data[3], $data[4]);
-                if ($stmt->execute()) $count++;
-            }
-            fclose($handle);
-            $success = "$count students uploaded successfully!";
+        $filename = $_FILES['csv_file']['name'];
+        
+        // Validate file extension to prevent path traversal and malicious uploads
+        $allowed_extensions = ['csv'];
+        $file_extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        
+        if (!in_array($file_extension, $allowed_extensions)) {
+            $error = "Invalid file type. Only CSV files are allowed.";
+        } elseif ($file === '' || $file === false) {
+            $error = "No file uploaded or file too large.";
         } else {
-            $error = "Error reading CSV file.";
+            // Validate that the file is actually a CSV by checking its contents
+            if (($handle = fopen($file, "r")) !== FALSE) {
+                $count = 0;
+                fgetcsv($handle); // Skip header row
+                while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                    if (count($data) >= 6) {
+                        $name = $data[0];
+                        $year = $data[1];
+                        $department = $data[2];
+                        $roll_no = $data[3];
+                        $email = $data[4];
+                        $rfid = $data[5];
+                        
+                        // Auto-generate roll number
+                        $roll_number = $year . $department . str_pad($roll_no, 3, '0', STR_PAD_LEFT);
+                        
+                        $stmt = $conn->prepare("INSERT INTO students (name, roll_number, department, email, rfid) VALUES (?, ?, ?, ?, ?)");
+                        $stmt->bind_param("sssss", $name, $roll_number, $department, $email, $rfid);
+                        if ($stmt->execute()) $count++;
+                    }
+                }
+                fclose($handle);
+                $success = "$count students uploaded successfully!";
+            } else {
+                $error = "Error reading CSV file.";
+            }
         }
     }
 }
@@ -325,36 +355,12 @@ if ($_POST) {
         </div>
         
         <ul class="nav-menu">
-            <li class="nav-item">
-                <a href="dashboard.php" class="nav-link">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Dashboard</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="add_student.php" class="nav-link active">
-                    <i class="fas fa-users"></i>
-                    <span>Students</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="attendance.php" class="nav-link">
-                    <i class="fas fa-calendar-check"></i>
-                    <span>Attendance</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="reports.php" class="nav-link">
-                    <i class="fas fa-chart-pie"></i>
-                    <span>Reports</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="settings.php" class="nav-link">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
+            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
+            <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
+            <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
+            <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
+            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
+            <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
         </ul>
     </div>
     
@@ -404,18 +410,37 @@ if ($_POST) {
                     </div>
                     
                     <div class="form-group">
-                        <label for="roll_number"><i class="fas fa-id-badge"></i> Roll Number</label>
-                        <input type="text" id="roll_number" name="roll_number" required>
+                        <label for="year"><i class="fas fa-calendar"></i> Year of Admission</label>
+                        <select id="year" name="year" required>
+                            <option value="">Select Year</option>
+                            <option value="24">2024-25 (24)</option>
+                            <option value="23">2023-24 (23)</option>
+                            <option value="22">2022-23 (22)</option>
+                            <option value="21">2021-22 (21)</option>
+                            <option value="20">2020-21 (20)</option>
+                        </select>
                     </div>
                     
                     <div class="form-group">
                         <label for="department"><i class="fas fa-building"></i> Department</label>
                         <select id="department" name="department" required>
                             <option value="">Select Department</option>
-                            <option value="CE">Computer Engineering</option>
-                            <option value="IT">Information Technology</option>
-                            <option value="ME">Mechanical Engineering</option>
+                            <option value="CE">Computer Engineering (CE)</option>
+                            <option value="IT">Information Technology (IT)</option>
+                            <option value="ME">Mechanical Engineering (ME)</option>
+                            <option value="EE">Electrical Engineering (EE)</option>
+                            <option value="EC">Electronics & Communication (EC)</option>
+                            <option value="CV">Civil Engineering (CV)</option>
+                            <option value="CSE">Computer Science & Engineering (CSE)</option>
+                            <option value="AI">Artificial Intelligence (AI)</option>
+                            <option value="DS">Data Science (DS)</option>
                         </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="roll_no"><i class="fas fa-id-badge"></i> Roll No. (1-999)</label>
+                        <input type="number" id="roll_no" name="roll_no" min="1" max="999" required placeholder="e.g., 198">
+                        <small style="color: #666; margin-top: 5px;">Auto-generated: <strong id="generatedRoll" style="color: #667eea; font-weight: bold;"></strong></small>
                     </div>
                     
                     <div class="form-group">
@@ -440,7 +465,7 @@ if ($_POST) {
                 <div class="form-group">
                     <label for="csv_file"><i class="fas fa-file-csv"></i> CSV File</label>
                     <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
-                    <small style="color: #666; margin-top: 5px; display: block;">CSV format: name,roll_number,department,email,rfid</small>
+                    <small style="color: #666; margin-top: 5px; display: block;">CSV format: name,year,department,roll_no,email,rfid</small>
                     <a href="#" onclick="downloadTemplate()" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">
                         <i class="fas fa-download"></i> Download Template
                     </a>
@@ -487,13 +512,32 @@ if ($_POST) {
         }
         
         function downloadTemplate() {
-            const csv = 'name,roll_number,department,email,rfid\nJohn Doe,2021001,CE,john.doe@college.edu,ABC123DEF\nJane Smith,2021002,IT,jane.smith@college.edu,DEF456GHI';
+            const csv = 'name,year,department,roll_no,email,rfid\nJohn Doe,24,CE,198,john.doe@college.edu,ABC123DEF\nJane Smith,23,IT,184,jane.smith@college.edu,DEF456GHI';
             const blob = new Blob([csv], { type: 'text/csv' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = 'students_template.csv';
             link.click();
         }
+        
+        // Auto-generate roll number preview
+        function generateRollNumber() {
+            const year = document.getElementById('year').value;
+            const department = document.getElementById('department').value;
+            const roll_no = document.getElementById('roll_no').value;
+            
+            if (year && department && roll_no) {
+                const paddedRoll = roll_no.padStart(3, '0');
+                document.getElementById('generatedRoll').textContent = year + department + paddedRoll;
+            } else {
+                document.getElementById('generatedRoll').textContent = '';
+            }
+        }
+        
+        // Add event listeners for real-time preview
+        document.getElementById('year').addEventListener('change', generateRollNumber);
+        document.getElementById('department').addEventListener('change', generateRollNumber);
+        document.getElementById('roll_no').addEventListener('input', generateRollNumber);
     </script>
 </body>
 </html>

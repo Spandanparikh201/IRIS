@@ -1,4 +1,9 @@
 {
+    "autoload": {
+        "psr-4": {
+            "IRIS\\": "src/"
+        }
+    },
     "require": {
         "phpmailer/phpmailer": "^6.8",
         "dompdf/dompdf": "^2.0"

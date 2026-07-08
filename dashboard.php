@@ -2,7 +2,7 @@
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: login.php");
-    exit();
+    exit(0);
 }
 
 include 'db_connect.php';
@@ -13,467 +13,69 @@ include 'db_connect.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>I.R.I.S Dashboard</title>
+    <title>Dashboard - I.R.I.S</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }
-        
-        .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 280px;
-            height: 100vh;
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(20px);
-            padding: 30px 0;
-            box-shadow: 5px 0 20px rgba(0,0,0,0.1);
-            z-index: 1000;
-            transition: transform 0.3s ease;
-        }
-        
-        .sidebar.collapsed {
-            transform: translateX(-220px);
-            width: 60px;
-        }
-        
-        .sidebar.collapsed .logo h1,
-        .sidebar.collapsed .logo p,
-        .sidebar.collapsed .nav-link span {
-            display: none;
-        }
-        
-        .sidebar.collapsed .nav-link {
-            justify-content: center;
-            padding: 15px;
-        }
-        
-        .logo {
-            text-align: center;
-            padding: 0 30px 30px;
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        
-        .logo h1 {
-            font-size: 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 5px;
-        }
-        
-        .logo p {
-            color: #666;
-            font-size: 0.9rem;
-        }
-        
-        .nav-menu {
-            list-style: none;
-            padding: 0 20px;
-        }
-        
-        .nav-item {
-            margin-bottom: 10px;
-        }
-        
-        .nav-link {
-            display: flex;
-            align-items: center;
-            padding: 15px 20px;
-            color: #555;
-            text-decoration: none;
-            border-radius: 15px;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-        
-        .nav-link span {
-            transition: opacity 0.3s ease;
-        }
-        
-        .nav-link:hover, .nav-link.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            transform: translateX(5px);
-        }
-        
-        .nav-link i {
-            margin-right: 12px;
-            width: 20px;
-            min-width: 20px;
-        }
-        
-        .main-content {
-            margin-left: 280px;
-            padding: 30px;
-            transition: margin-left 0.3s ease;
-        }
-        
-        .main-content.expanded {
-            margin-left: 60px;
-        }
-        
-        .toggle-btn {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            cursor: pointer;
-            z-index: 1001;
-            transition: all 0.3s ease;
-        }
-        
-        .toggle-btn:hover {
-            transform: scale(1.1);
-        }
-        
-        .header {
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(20px);
-            padding: 25px 30px;
-            border-radius: 20px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .header-title h2 {
-            color: #333;
-            font-size: 2rem;
-            margin-bottom: 5px;
-        }
-        
-        .header-title p {
-            color: #666;
-        }
-        
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .user-avatar {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 1.2rem;
-        }
-        
-        .logout-btn {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .logout-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255,107,107,0.4);
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 25px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(20px);
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            text-align: center;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255,255,255,0.3);
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-        }
-        
-        .stat-icon {
-            width: 70px;
-            height: 70px;
-            margin: 0 auto 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.8rem;
-        }
-        
-        .stat-number {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
-        }
-        
-        .stat-label {
-            color: #666;
-            font-weight: 500;
-        }
-        
-        .card {
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255,255,255,0.3);
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-        }
-        
-        .card-title {
-            font-size: 1.5rem;
-            color: #333;
-            font-weight: 600;
-        }
-        
-        .filters {
-            display: flex;
-            gap: 20px;
-            align-items: end;
-            flex-wrap: wrap;
-            margin-bottom: 25px;
-        }
-        
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .form-group label {
-            font-weight: 600;
-            color: #555;
-            font-size: 0.9rem;
-        }
-        
-        input, select {
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: white;
-        }
-        
-        input:focus, select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102,126,234,0.3);
-        }
-        
-        .btn-secondary {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(72,187,120,0.3);
-        }
-        
-        .table-container {
-            overflow-x: auto;
-            border-radius: 16px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-        }
-        
-        th {
-            background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
-            color: white;
-            padding: 20px 16px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        
-        td {
-            padding: 16px;
-            border-bottom: 1px solid #e2e8f0;
-            transition: background-color 0.2s ease;
-        }
-        
-        tr:hover td {
-            background-color: #f7fafc;
-        }
-        
-        .status-badge {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        
-        .status-in {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-        
-        .status-out {
-            background: #fed7d7;
-            color: #742a2a;
-        }
-        
-        @media (max-width: 1024px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            
-            .sidebar.mobile-open {
-                transform: translateX(0);
-            }
-            
-            .main-content {
-                margin-left: 0;
-            }
-            
-            .header {
-                flex-direction: column;
-                gap: 20px;
-                text-align: center;
-            }
-            
-            .filters {
-                flex-direction: column;
-                align-items: stretch;
-            }
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+        .sidebar { position: fixed; left: 0; top: 0; width: 280px; height: 100vh; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 30px 0; box-shadow: 5px 0 20px rgba(0,0,0,0.1); z-index: 1000; transition: transform 0.3s ease; }
+        .sidebar.collapsed { transform: translateX(-220px); width: 60px; }
+        .sidebar.collapsed .logo h1, .sidebar.collapsed .logo p, .sidebar.collapsed .nav-link span { display: none; }
+        .sidebar.collapsed .nav-link { justify-content: center; padding: 15px; }
+        .logo { text-align: center; padding: 0 30px 30px; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 30px; }
+        .logo h1 { font-size: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 5px; }
+        .logo p { color: #666; font-size: 0.9rem; }
+        .nav-menu { list-style: none; padding: 0 20px; }
+        .nav-item { margin-bottom: 10px; }
+        .nav-link { display: flex; align-items: center; padding: 15px 20px; color: #555; text-decoration: none; border-radius: 15px; transition: all 0.3s ease; font-weight: 500; }
+        .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; transform: translateX(5px); }
+        .nav-link i { margin-right: 12px; width: 20px; min-width: 20px; }
+        .main-content { margin-left: 280px; padding: 30px; transition: margin-left 0.3s ease; }
+        .main-content.expanded { margin-left: 60px; }
+        .toggle-btn { position: fixed; top: 20px; left: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 1001; transition: all 0.3s ease; }
+        .toggle-btn:hover { transform: scale(1.1); }
+        .header { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 25px 30px; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .header-title h2 { color: #333; font-size: 2rem; margin-bottom: 5px; }
+        .header-title p { color: #666; }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .user-avatar { width: 50px; height: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.2rem; }
+        .logout-btn { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 500; transition: all 0.3s ease; text-decoration: none; }
+        .logout-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(255,107,107,0.4); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px; margin-bottom: 30px; }
+        .stat-card { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.3); }
+        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.15); }
+        .stat-icon { width: 70px; height: 70px; margin: 0 auto 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.8rem; }
+        .stat-number { font-size: 2.5rem; font-weight: bold; color: #333; margin-bottom: 10px; }
+        .stat-label { color: #666; font-weight: 500; }
+        .card { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 30px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.3); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .card-title { font-size: 1.5rem; color: #333; font-weight: 600; }
+        .activity-item { display: flex; align-items: flex-start; gap: 15px; padding: 15px; border-bottom: 1px solid #e2e8f0; }
+        .activity-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
+        .activity-content { flex: 1; }
+        .activity-user { font-weight: 600; color: #333; }
+        .activity-time { color: #999; font-size: 0.85rem; }
+        .quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 20px; }
+        .action-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 20px; border-radius: 15px; cursor: pointer; transition: all 0.3s ease; text-align: center; text-decoration: none; display: block; }
+        .action-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(102,126,234,0.3); }
+        .action-btn i { display: block; font-size: 2rem; margin-bottom: 10px; }
+        @media (max-width: 1024px) { .sidebar { transform: translateX(-100%); } .sidebar.mobile-open { transform: translateX(0); } .main-content { margin-left: 0; } .header { flex-direction: column; gap: 20px; text-align: center; } }
     </style>
 </head>
 <body>
-    <button class="toggle-btn" onclick="toggleSidebar()">
-        <i class="fas fa-bars"></i>
-    </button>
+    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
     
     <div class="sidebar" id="sidebar">
-        <div class="logo">
-            <h1>I.R.I.S</h1>
-            <p>Dashboard</p>
-        </div>
-        
+        <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
         <ul class="nav-menu">
-            <li class="nav-item">
-                <a href="dashboard.php" class="nav-link active">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Dashboard</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="add_student.php" class="nav-link">
-                    <i class="fas fa-users"></i>
-                    <span>Students</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="attendance.php" class="nav-link">
-                    <i class="fas fa-calendar-check"></i>
-                    <span>Attendance</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="reports.php" class="nav-link">
-                    <i class="fas fa-chart-pie"></i>
-                    <span>Reports</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="library.php" class="nav-link">
-                    <i class="fas fa-book"></i>
-                    <span>Library</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="settings.php" class="nav-link">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
+            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
+            <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
+            <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
+            <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
+            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
+            <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
             <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
-            <li class="nav-item">
-                <a href="manage_users.php" class="nav-link">
-                    <i class="fas fa-users-cog"></i>
-                    <span>Manage Users</span>
-                </a>
-            </li>
+            <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
             <?php endif; ?>
         </ul>
     </div>
@@ -482,29 +84,50 @@ include 'db_connect.php';
         <div class="header">
             <div class="header-title">
                 <h2>Welcome back, <?= htmlspecialchars($_SESSION['user']) ?>!</h2>
-                <p><?= isset($_SESSION['user_role']) ? ucfirst($_SESSION['user_role']) : 'User' ?> - <?= isset($_SESSION['user_dept']) ? htmlspecialchars($_SESSION['user_dept']) : 'General' ?> Department</p>
+                <p>Intelligent RFID Identification System</p>
             </div>
             <div class="user-info">
-                <div class="user-avatar">
-                    <?= strtoupper(substr($_SESSION['user'], 0, 1)) ?>
-                </div>
-                <a href="logout.php" class="logout-btn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
+                <div class="user-avatar"><?= strtoupper(substr($_SESSION['user'], 0, 1)) ?></div>
+                <a href="logout.php" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
         </div>
         
         <?php
-        // Get statistics
-        $totalStudents = $conn->query("SELECT COUNT(*) FROM students")->fetch_row()[0];
-        $todayPresent = $conn->query("SELECT COUNT(DISTINCT rfid) FROM attendance WHERE DATE(timestamp) = CURDATE() AND status = 'IN'")->fetch_row()[0];
-        $todayTotal = $conn->query("SELECT COUNT(*) FROM attendance WHERE DATE(timestamp) = CURDATE()")->fetch_row()[0];
+        // Get statistics - ALL data using prepared statements
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM students");
+        $stmt->execute();
+        $totalStudents = $stmt->get_result()->fetch_row()[0];
+        
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT department) FROM students");
+        $stmt->execute();
+        $totalDepartments = $stmt->get_result()->fetch_row()[0];
+        
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT rfid) FROM attendance WHERE DATE(timestamp) = CURDATE() AND status = 'IN'");
+        $stmt->execute();
+        $todayPresent = $stmt->get_result()->fetch_row()[0];
+        
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM attendance WHERE DATE(timestamp) = CURDATE()");
+        $stmt->execute();
+        $todayTotal = $stmt->get_result()->fetch_row()[0];
+        
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM books");
+        $stmt->execute();
+        $totalBooks = $stmt->get_result()->fetch_row()[0];
+        
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM book_transactions WHERE issue_date IS NOT NULL AND return_date IS NULL");
+        $stmt->execute();
+        $issuedBooks = $stmt->get_result()->fetch_row()[0];
+        
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM users");
+        $stmt->execute();
+        $totalUsers = $stmt->get_result()->fetch_row()[0];
+        
         $attendanceRate = $totalStudents > 0 ? round(($todayPresent / $totalStudents) * 100, 1) : 0;
         ?>
         
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-icon">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                     <i class="fas fa-users"></i>
                 </div>
                 <div class="stat-number"><?= $totalStudents ?></div>
@@ -512,7 +135,15 @@ include 'db_connect.php';
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);">
+                    <i class="fas fa-building"></i>
+                </div>
+                <div class="stat-number"><?= $totalDepartments ?></div>
+                <div class="stat-label">Departments</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);">
                     <i class="fas fa-user-check"></i>
                 </div>
                 <div class="stat-number"><?= $todayPresent ?></div>
@@ -520,7 +151,15 @@ include 'db_connect.php';
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);">
+                    <i class="fas fa-book"></i>
+                </div>
+                <div class="stat-number"><?= $issuedBooks ?></div>
+                <div class="stat-label">Books Issued</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                     <i class="fas fa-chart-line"></i>
                 </div>
                 <div class="stat-number"><?= $attendanceRate ?>%</div>
@@ -528,123 +167,99 @@ include 'db_connect.php';
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon">
-                    <i class="fas fa-clock"></i>
+                <div class="stat-icon" style="background: linear-gradient(135deg, #805ad5 0%, #6b46c1 100%);">
+                    <i class="fas fa-users-cog"></i>
                 </div>
-                <div class="stat-number"><?= $todayTotal ?></div>
-                <div class="stat-label">Today's Records</div>
+                <div class="stat-number"><?= $totalUsers ?></div>
+                <div class="stat-label">Active Users</div>
             </div>
         </div>
         
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-filter"></i> Filter Attendance
-                </h3>
+                <h3 class="card-title"><i class="fas fa-bolt"></i> Quick Actions</h3>
             </div>
             
-            <form method="GET">
-                <div class="filters">
-                    <div class="form-group">
-                        <label for="date"><i class="fas fa-calendar"></i> Date</label>
-                        <input type="date" name="date" value="<?= $_GET['date'] ?? '' ?>">
-                    </div>
-                    <div class="form-group">
-                        <label for="department"><i class="fas fa-building"></i> Department</label>
-                        <select name="department">
-                            <option value="">All Departments</option>
-                            <option value="CE" <?= ($_GET['department'] ?? '') == 'CE' ? 'selected' : '' ?>>Computer Engineering</option>
-                            <option value="IT" <?= ($_GET['department'] ?? '') == 'IT' ? 'selected' : '' ?>>Information Technology</option>
-                            <option value="ME" <?= ($_GET['department'] ?? '') == 'ME' ? 'selected' : '' ?>>Mechanical Engineering</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i> Filter
-                    </button>
-                </div>
-            </form>
+            <div class="quick-actions">
+                <a href="add_student.php" class="action-btn">
+                    <i class="fas fa-user-plus"></i>
+                    Add Student
+                </a>
+                <a href="attendance.php" class="action-btn">
+                    <i class="fas fa-calendar-plus"></i>
+                    Mark Attendance
+                </a>
+                <a href="reports.php" class="action-btn">
+                    <i class="fas fa-file-export"></i>
+                    Generate Report
+                </a>
+                <a href="library.php" class="action-btn">
+                    <i class="fas fa-book-plus"></i>
+                    Issue Book
+                </a>
+                <a href="settings.php" class="action-btn">
+                    <i class="fas fa-cog"></i>
+                    Settings
+                </a>
+            </div>
         </div>
-        
-        <?php
-        $where = "1";
-        $params = [];
-        if (!empty($_GET['date'])) {
-            $where .= " AND DATE(timestamp) = ?";
-            $params[] = $_GET['date'];
-        }
-        if (!empty($_GET['department'])) {
-            $where .= " AND a.department = ?";
-            $params[] = $_GET['department'];
-        }
-        
-        $sql = "SELECT a.name, a.rfid, a.status, a.timestamp, a.department, s.roll_number FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE $where ORDER BY a.timestamp DESC LIMIT 50";
-        $stmt = $conn->prepare($sql);
-        if ($params) {
-            $types = str_repeat("s", count($params));
-            $stmt->bind_param($types, ...$params);
-        }
-        $stmt->execute();
-        $result = $stmt->get_result();
-        ?>
         
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-table"></i> Recent Attendance Records
-                </h3>
-                <div style="display: flex; gap: 10px;">
-                    <a href="send_email.php" class="btn btn-secondary">
-                        <i class="fas fa-envelope"></i> Send Report
-                    </a>
-                    <button onclick="exportTableToCSV('attendance.csv')" class="btn btn-secondary">
-                        <i class="fas fa-download"></i> Export CSV
-                    </button>
-                </div>
+                <h3 class="card-title"><i class="fas fa-history"></i> Recent Activity</h3>
             </div>
             
-            <div class="table-container">
-                <table id="attendanceTable">
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-user"></i> Name</th>
-                            <th><i class="fas fa-id-badge"></i> Roll No</th>
-                            <th><i class="fas fa-id-card"></i> RFID</th>
-                            <th><i class="fas fa-check-circle"></i> Status</th>
-                            <th><i class="fas fa-clock"></i> Timestamp</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($row = $result->fetch_assoc()): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($row['name']) ?></td>
-                            <td><?= htmlspecialchars($row['roll_number']) ?></td>
-                            <td><?= htmlspecialchars($row['rfid']) ?></td>
-                            <td><span class="status-badge status-<?= strtolower($row['status']) ?>"><?= $row['status'] ?></span></td>
-                            <td><?= date('M d, Y h:i A', strtotime($row['timestamp'])) ?></td>
-                        </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
+            <div id="activityFeed">
+                <?php
+                // Get recent activity - using direct queries for static data
+                $studentsQuery = "SELECT 'student' as type, name, CONCAT('Added new student: ', name) as action, NOW() as timestamp FROM students";
+                $attendanceQuery = "SELECT 'attendance' as type, name, CONCAT('Marked attendance: ', status) as action, timestamp FROM attendance WHERE DATE(timestamp) = CURDATE()";
+                
+                $studentsResult = $conn->query($studentsQuery);
+                $attendanceResult = $conn->query($attendanceQuery);
+                
+                // Combine results manually
+                $allRows = [];
+                if ($studentsResult && $studentsResult->num_rows > 0) {
+                    while ($row = $studentsResult->fetch_assoc()) {
+                        $allRows[] = $row;
+                    }
+                }
+                if ($attendanceResult && $attendanceResult->num_rows > 0) {
+                    while ($row = $attendanceResult->fetch_assoc()) {
+                        $allRows[] = $row;
+                    }
+                }
+                
+                // Sort by timestamp descending and limit to 10
+                usort($allRows, function($a, $b) {
+                    return strcmp($b['timestamp'], $a['timestamp']);
+                });
+                $allRows = array_slice($allRows, 0, 10);
+                
+                if (!empty($allRows)) {
+                    foreach ($allRows as $row) {
+                        $iconColor = $row['type'] == 'student' ? '#667eea' : '#48bb78';
+                        ?>
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: <?= $iconColor ?>;">
+                                <i class="fas fa-<?= $row['type'] == 'student' ? 'user' : 'check-circle' ?>"></i>
+                            </div>
+                            <div class="activity-content">
+                                <div class="activity-user"><?= htmlspecialchars($row['name']) ?></div>
+                                <div><?= htmlspecialchars($row['action']) ?></div>
+                                <div class="activity-time"><?= date('M d, Y h:i A', strtotime($row['timestamp'])) ?></div>
+                            </div>
+                        </div>
+                        <?php
+                    }
+                } else {
+                    echo '<p style="text-align: center; color: #999; padding: 20px;">No recent activity</p>';
+                }
+                ?>
             </div>
         </div>
     </div>
-    
-    <script>
-        function exportTableToCSV(filename) {
-            let csv = [];
-            const rows = document.querySelectorAll("table tr");
-            for (let row of rows) {
-                const cols = row.querySelectorAll("td, th");
-                const rowData = Array.from(cols).map(col => `"${col.innerText}"`);
-                csv.push(rowData.join(","));
-            }
-            const blob = new Blob([csv.join("\n")], { type: 'text/csv' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            link.click();
-        }
-    </script>
     
     <script>
         function toggleSidebar() {

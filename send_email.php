@@ -5,12 +5,6 @@ if (!isset($_SESSION['user'])) {
     exit();
 }
 
-// Check if user has permission to send emails (admin and teacher only)
-if (!in_array($_SESSION['user_role'] ?? 'staff', ['admin', 'teacher'])) {
-    echo "<script>alert('Access denied. You do not have permission to send emails.'); window.location.href='dashboard.php';</script>";
-    exit();
-}
-
 require 'vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;

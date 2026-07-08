@@ -21,11 +21,12 @@ if ($result->num_rows === 1) {
         if (isset($user['first_login']) && $user['first_login'] == 1) {
             $_SESSION['force_password_reset'] = true;
             header("Location: reset_password.php");
-            exit();
+            exit(0);
         }
         
+        // Redirect to main dashboard
         header("Location: dashboard.php");
-        exit();
+        exit(0);
     }
 }
 

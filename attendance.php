@@ -2,9 +2,10 @@
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: login.php");
-    exit();
+    exit(0);
 }
 include 'db_connect.php';
+include 'rbac_helper.php';
 ?>
 
 <!DOCTYPE html>
@@ -54,11 +55,15 @@ include 'db_connect.php';
     <div class="sidebar" id="sidebar">
         <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
         <ul class="nav-menu">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
+            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
             <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
-            <li class="nav-item"><a href="attendance.php" class="nav-link active"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
+            <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
             <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
+            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
             <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
+            <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
+            <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
+            <?php endif; ?>
         </ul>
     </div>
     
@@ -98,19 +103,30 @@ include 'db_connect.php';
     </div>
     
     <?php
-    // Get chart data
-    $todayIn = $conn->query("SELECT COUNT(DISTINCT rfid) FROM attendance WHERE DATE(timestamp) = CURDATE() AND status = 'IN'")->fetch_row()[0];
-    $todayOut = $conn->query("SELECT COUNT(DISTINCT rfid) FROM attendance WHERE DATE(timestamp) = CURDATE() AND status = 'OUT'")->fetch_row()[0];
+    // Get chart data using prepared statements
+    $stmt = $conn->prepare("SELECT COUNT(DISTINCT rfid) FROM attendance WHERE DATE(timestamp) = CURDATE() AND status = 'IN'");
+    $stmt->execute();
+    $todayIn = $stmt->get_result()->fetch_row()[0];
     
-    $deptData = $conn->query("SELECT department, COUNT(*) as count FROM attendance WHERE DATE(timestamp) = CURDATE() GROUP BY department");
+    $stmt = $conn->prepare("SELECT COUNT(DISTINCT rfid) FROM attendance WHERE DATE(timestamp) = CURDATE() AND status = 'OUT'");
+    $stmt->execute();
+    $todayOut = $stmt->get_result()->fetch_row()[0];
+    
+    $stmt = $conn->prepare("SELECT department, COUNT(*) as count FROM attendance WHERE DATE(timestamp) = CURDATE() GROUP BY department");
+    $stmt->execute();
+    $deptData = $stmt->get_result();
     $deptLabels = $deptCounts = [];
     while ($row = $deptData->fetch_assoc()) { $deptLabels[] = $row['department']; $deptCounts[] = $row['count']; }
     
-    $weeklyData = $conn->query("SELECT DATE(timestamp) as date, COUNT(*) as count FROM attendance WHERE timestamp >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(timestamp) ORDER BY date");
+    $stmt = $conn->prepare("SELECT DATE(timestamp) as date, COUNT(*) as count FROM attendance WHERE timestamp >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(timestamp) ORDER BY date");
+    $stmt->execute();
+    $weeklyData = $stmt->get_result();
     $weekLabels = $weekCounts = [];
     while ($row = $weeklyData->fetch_assoc()) { $weekLabels[] = date('M d', strtotime($row['date'])); $weekCounts[] = $row['count']; }
     
-    $hourlyData = $conn->query("SELECT HOUR(timestamp) as hour, COUNT(*) as count FROM attendance WHERE DATE(timestamp) = CURDATE() GROUP BY HOUR(timestamp) ORDER BY hour");
+    $stmt = $conn->prepare("SELECT HOUR(timestamp) as hour, COUNT(*) as count FROM attendance WHERE DATE(timestamp) = CURDATE() GROUP BY HOUR(timestamp) ORDER BY hour");
+    $stmt->execute();
+    $hourlyData = $stmt->get_result();
     $hourLabels = $hourCounts = [];
     while ($row = $hourlyData->fetch_assoc()) { $hourLabels[] = $row['hour'] . ':00'; $hourCounts[] = $row['count']; }
     ?>

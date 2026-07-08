@@ -7,13 +7,9 @@ if (!isset($_SESSION['user'])) {
     exit();
 }
 
-// Only admin can manage departments
-if ($_SESSION['user_role'] !== 'admin') {
-    echo "<script>alert('Access denied. Only administrators can manage departments.'); window.location.href='dashboard.php';</script>";
-    exit();
-}
-
 include 'db_connect.php';
+include 'rbac_helper.php';
+
 $conn->query("SET time_zone = '+05:30'");
 
 // Handle form submissions
@@ -48,15 +44,23 @@ if ($_POST) {
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
-        .sidebar { position: fixed; left: 0; top: 0; width: 280px; height: 100vh; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 30px 0; box-shadow: 5px 0 20px rgba(0,0,0,0.1); z-index: 1000; }
+        .sidebar { position: fixed; left: 0; top: 0; width: 280px; height: 100vh; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 30px 0; box-shadow: 5px 0 20px rgba(0,0,0,0.1); z-index: 1000; transition: transform 0.3s ease; }
+        .sidebar.collapsed { transform: translateX(-220px); width: 60px; }
+        .sidebar.collapsed .logo h1, .sidebar.collapsed .logo p, .sidebar.collapsed .nav-link span { display: none; }
+        .sidebar.collapsed .nav-link { justify-content: center; padding: 15px; }
         .logo { text-align: center; padding: 0 30px 30px; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 30px; }
         .logo h1 { font-size: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 5px; }
+        .logo p { color: #666; font-size: 0.9rem; }
         .nav-menu { list-style: none; padding: 0 20px; }
         .nav-item { margin-bottom: 10px; }
         .nav-link { display: flex; align-items: center; padding: 15px 20px; color: #555; text-decoration: none; border-radius: 15px; transition: all 0.3s ease; font-weight: 500; }
         .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; transform: translateX(5px); }
-        .nav-link i { margin-right: 12px; width: 20px; }
-        .main-content { margin-left: 280px; padding: 30px; }
+        .nav-link i { margin-right: 12px; width: 20px; min-width: 20px; }
+        .nav-link span { transition: opacity 0.3s ease; }
+        .main-content { margin-left: 280px; padding: 30px; transition: margin-left 0.3s ease; }
+        .main-content.expanded { margin-left: 60px; }
+        .toggle-btn { position: fixed; top: 20px; left: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 1001; transition: all 0.3s ease; }
+        .toggle-btn:hover { transform: scale(1.1); }
         .header { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 25px 30px; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
         .card { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 30px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .btn { padding: 12px 24px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
@@ -78,23 +82,29 @@ if ($_POST) {
         .col-md-4 { flex: 1; }
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
         .modal-content { background: white; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 30px; border-radius: 20px; width: 600px; max-height: 90vh; overflow-y: auto; }
+        @media (max-width: 1024px) { .sidebar { transform: translateX(-100%); } .sidebar.mobile-open { transform: translateX(0); } .main-content { margin-left: 0; } .header { flex-direction: column; gap: 20px; text-align: center; } }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    
+    <div class="sidebar" id="sidebar">
         <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
         <ul class="nav-menu">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
+            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
             <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
             <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
             <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
             <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
             <li class="nav-item"><a href="manage_departments.php" class="nav-link active"><i class="fas fa-building"></i><span>Departments</span></a></li>
             <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
+            <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
+            <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
+            <?php endif; ?>
         </ul>
     </div>
     
-    <div class="main-content">
+    <div class="main-content" id="mainContent">
         <div class="header">
             <div>
                 <h2>🏢 Department Management</h2>
@@ -272,6 +282,14 @@ if ($_POST) {
     </div>
     
     <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('expanded');
+            if (window.innerWidth <= 1024) sidebar.classList.toggle('mobile-open');
+        }
+        
         function showAddModal() {
             document.getElementById('addModal').style.display = 'block';
         }
@@ -303,3 +321,5 @@ if ($_POST) {
     </script>
 </body>
 </html>
+
+

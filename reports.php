@@ -8,13 +8,8 @@ if (!isset($_SESSION['user'])) {
     exit();
 }
 
-// Check if user has access to reports (admin and teacher only)
-if (!in_array($_SESSION['user_role'], ['admin', 'teacher'])) {
-    echo "<script>alert('Access denied. You do not have permission to view reports.'); window.location.href='dashboard.php';</script>";
-    exit();
-}
-
 include 'db_connect.php';
+include 'rbac_helper.php';
 // 🔧 TIMEZONE FIX (MySQL session)
 $conn->query("SET time_zone = '+05:30'");
 
@@ -49,36 +44,49 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
     $result = null;
     switch($reportType) {
         case 'daily':
-            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = CURDATE() ORDER BY a.timestamp DESC";
-            $result = $conn->query($sql);
+            $date = $_GET['date'] ?? date('Y-m-d');
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = ? ORDER BY a.timestamp DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param('s', $date);
+            $stmt->execute();
+            $result = $stmt->get_result();
             break;
         case 'weekly':
-            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(CURDATE(), 1) ORDER BY a.timestamp DESC";
-            $result = $conn->query($sql);
+            $date = $_GET['date'] ?? date('Y-m-d');
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(?, 1) ORDER BY a.timestamp DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param('s', $date);
+            $stmt->execute();
+            $result = $stmt->get_result();
             break;
         case 'monthly':
-            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(CURDATE()) ORDER BY a.timestamp DESC";
-            $result = $conn->query($sql);
+            $date = $_GET['date'] ?? date('Y-m-d');
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(?) AND YEAR(a.timestamp) = YEAR(?) ORDER BY a.timestamp DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param('ss', $date, $date);
+            $stmt->execute();
+            $result = $stmt->get_result();
             break;
         case 'department':
             $dept = $_GET['dept'] ?? '';
             if ($dept) {
-                $sql = "SELECT a.name, s.roll_number, s.department, d.dept_name, a.status, a.timestamp 
+                // Fixed: Use department directly from attendance table
+                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
                        FROM attendance a 
-                       LEFT JOIN students s ON a.rfid = s.rfid 
-                       LEFT JOIN departments d ON s.department = d.dept_code 
-                       WHERE s.department = ? 
+                       INNER JOIN students s ON a.rfid = s.rfid 
+                       LEFT JOIN departments d ON a.department = d.dept_code 
+                       WHERE a.department = ? 
                        ORDER BY a.timestamp DESC";
                 $stmt = $conn->prepare($sql);
                 $stmt->bind_param('s', $dept);
                 $stmt->execute();
                 $result = $stmt->get_result();
             } else {
-                $sql = "SELECT a.name, s.roll_number, s.department, d.dept_name, a.status, a.timestamp 
+                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
                        FROM attendance a 
-                       LEFT JOIN students s ON a.rfid = s.rfid 
-                       LEFT JOIN departments d ON s.department = d.dept_code 
-                       ORDER BY d.dept_name, a.timestamp DESC";
+                       INNER JOIN students s ON a.rfid = s.rfid 
+                       LEFT JOIN departments d ON a.department = d.dept_code 
+                       ORDER BY a.department, a.timestamp DESC";
                 $result = $conn->query($sql);
             }
             break;
@@ -87,48 +95,76 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             $dateTo = $_GET['date_to'] ?? '';
             $dept = $_GET['dept'] ?? '';
             $student = $_GET['student'] ?? '';
-            $where = [];
-            $params = [];
-            $types = '';
             
-            if ($dateFrom) {
-                $where[] = "DATE(a.timestamp) >= ?";
-                $params[] = $dateFrom;
-                $types .= 's';
-            }
-            if ($dateTo) {
-                $where[] = "DATE(a.timestamp) <= ?";
-                $params[] = $dateTo;
-                $types .= 's';
-            }
-            if ($dept) {
-                $where[] = "s.department = ?";
-                $params[] = $dept;
-                $types .= 's';
-            }
-            
+            // Individual student attendance (detailed view)
             if ($student) {
-                $where[] = "s.roll_number = ?";
-                $params[] = $student;
-                $types .= 's';
-                $whereClause = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-                $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid$whereClause ORDER BY a.timestamp DESC";
-            } else {
-                $whereClause = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-                $sql = "SELECT a.name, s.roll_number, s.department, COUNT(*) as total_attendance FROM attendance a INNER JOIN students s ON a.rfid = s.rfid$whereClause GROUP BY a.rfid ORDER BY a.name";
-            }
-            
-            if ($params) {
+                $where = "WHERE s.roll_number = ?";
+                $params = [$student];
+                $types = 's';
+                
+                if ($dateFrom) {
+                    $where .= " AND DATE(a.timestamp) >= ?";
+                    $params[] = $dateFrom;
+                    $types .= 's';
+                }
+                if ($dateTo) {
+                    $where .= " AND DATE(a.timestamp) <= ?";
+                    $params[] = $dateTo;
+                    $types .= 's';
+                }
+                
+                $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp 
+                       FROM attendance a 
+                       INNER JOIN students s ON a.rfid = s.rfid 
+                       $where 
+                       ORDER BY a.timestamp DESC";
+                
                 $stmt = $conn->prepare($sql);
                 $stmt->bind_param($types, ...$params);
                 $stmt->execute();
                 $result = $stmt->get_result();
-            } else {
-                $result = $conn->query($sql);
+            } 
+            // Student summary (grouped by student)
+            else {
+                $where = "";
+                $params = [];
+                $types = '';
+                
+                if ($dateFrom) {
+                    $where .= " WHERE DATE(a.timestamp) >= ?";
+                    $params[] = $dateFrom;
+                    $types .= 's';
+                }
+                if ($dateTo) {
+                    $where .= $where ? " AND DATE(a.timestamp) <= ?" : " WHERE DATE(a.timestamp) <= ?";
+                    $params[] = $dateTo;
+                    $types .= 's';
+                }
+                if ($dept) {
+                    $where .= $where ? " AND a.department = ?" : " WHERE a.department = ?";
+                    $params[] = $dept;
+                    $types .= 's';
+                }
+                
+                $sql = "SELECT s.name, s.roll_number, a.department, COUNT(*) as total_attendance 
+                       FROM attendance a 
+                       INNER JOIN students s ON a.rfid = s.rfid 
+                       $where 
+                       GROUP BY s.roll_number, s.name, a.department 
+                       ORDER BY s.name";
+                
+                if ($params) {
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bind_param($types, ...$params);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                } else {
+                    $result = $conn->query($sql);
+                }
             }
             break;
         default:
-            $sql = "SELECT a.name, s.roll_number, s.department, a.status, a.timestamp FROM attendance a LEFT JOIN students s ON a.rfid = s.rfid ORDER BY a.timestamp DESC LIMIT 100";
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid ORDER BY a.timestamp DESC LIMIT 100";
             $result = $conn->query($sql);
             break;
     }
@@ -137,10 +173,12 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
     
     $data = [];
     if ($result) {
-        while($row = $result->fetch_assoc()) { $data[] = $row; }
+        while($row = $result->fetch_assoc()) { 
+            $data[] = $row; 
+        }
     } else {
         error_log("Query failed: " . $conn->error);
-        die("Database query failed");
+        die("<div style='padding: 20px; color: red; text-align: center;'><h3>Error: Database query failed. Please check the logs for details.</h3></div>");
     }
     
     if ($format == 'excel') {
@@ -386,11 +424,15 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
     <div class="sidebar" id="sidebar">
         <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
         <ul class="nav-menu">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
+            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
             <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
             <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
-            <li class="nav-item"><a href="reports.php" class="nav-link active"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
+            <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
+            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
             <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
+            <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
+            <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
+            <?php endif; ?>
         </ul>
     </div>
     
@@ -586,7 +628,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 selectedReport = 'department';
             }
             closeModal();
-            showFormatDialog('');
+            showFormatDialog(selectedReport);
         }
         
 
@@ -603,7 +645,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             if (student) params.push(`student=${encodeURIComponent(student)}`);
             selectedReport = params.length ? `student&${params.join('&')}` : 'student';
             closeModal();
-            showFormatDialog('');
+            showFormatDialog(selectedReport);
         }
         
         function filterStudents() {

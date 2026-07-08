@@ -5,6 +5,7 @@ if (!isset($_SESSION['user'])) {
     exit();
 }
 include 'db_connect.php';
+include 'rbac_helper.php';
 
 if ($_POST) {
     if (isset($_POST['change_password'])) {
@@ -38,6 +39,9 @@ if ($_POST) {
         else $error = "Error adding user!";
     }
 }
+
+// Get all departments for dropdown
+$deptResult = $conn->query("SELECT dept_code, dept_name FROM departments WHERE status = 'active' ORDER BY dept_name");
 ?>
 
 <!DOCTYPE html>
@@ -95,12 +99,13 @@ if ($_POST) {
     <div class="sidebar" id="sidebar">
         <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
         <ul class="nav-menu">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
+            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
             <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
             <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
             <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
-            <li class="nav-item"><a href="settings.php" class="nav-link active"><i class="fas fa-cog"></i><span>Settings</span></a></li>
-            <?php if ($_SESSION['user_role'] == 'admin'): ?>
+            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
+            <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
+            <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
             <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
             <?php endif; ?>
         </ul>
@@ -158,7 +163,12 @@ if ($_POST) {
                     </div>
                     <div class="form-group">
                         <label>Department</label>
-                        <input type="text" name="dept" required>
+                        <select name="dept" required>
+                            <option value="">Select Department</option>
+                            <?php while ($row = $deptResult->fetch_assoc()): ?>
+                            <option value="<?= htmlspecialchars($row['dept_code']) ?>"><?= htmlspecialchars($row['dept_name']) ?></option>
+                            <?php endwhile; ?>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Password</label>
@@ -169,8 +179,10 @@ if ($_POST) {
                         <select name="role" required>
                             <option value="">Select Role</option>
                             <option value="admin">Admin</option>
+                            <option value="hod">HOD (Head of Department)</option>
                             <option value="teacher">Teacher</option>
                             <option value="staff">Staff</option>
+                            <option value="librarian">Librarian</option>
                         </select>
                     </div>
                     <button type="submit" name="add_user" class="btn btn-primary">
