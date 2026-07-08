@@ -2,3 +2,15 @@
 vendor/
 .env
 .phpunit.cache/
+
+# Secrets
+db_connect.php
+send_email.php
+Final_IRIS.ino
+debug_log.txt
+
+# IDE
+.idea/
+
+# Test artifacts
+test-failures/
