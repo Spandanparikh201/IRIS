@@ -1,7 +1,11 @@
 .planning/
+
+# Phase 1: Infrastructure Foundation
 vendor/
 .env
 .phpunit.cache/
+.phpunit.result.cache
+test-failures/
 
 # Secrets
 db_connect.php
@@ -11,6 +15,3 @@ debug_log.txt
 
 # IDE
 .idea/
-
-# Test artifacts
-test-failures/
