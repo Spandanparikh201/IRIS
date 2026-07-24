@@ -1,8 +1,15 @@
 <?php
-session_start();
 header("Content-Type: application/json");
 date_default_timezone_set('Asia/Kolkata');
 include 'db_connect.php';
+$conn->query("SET time_zone = '+05:30'");
+
+$apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
+$validKey = getenv('RFID_API_KEY') ?: 'iris-rfid-default-key';
+if ($apiKey !== $validKey) {
+    echo json_encode(["success" => false, "message" => "Unauthorized"]);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(["success" => false, "message" => "Invalid request"]);

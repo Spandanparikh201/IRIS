@@ -227,6 +227,10 @@ if (isset($_SESSION['user'])) {
                 <input type="password" id="password" name="password" required>
             </div>
             
+            <div style="text-align: right; margin-top: -10px; margin-bottom: 20px;">
+                <a href="reset_password.php" style="color: #667eea; text-decoration: none; font-size: 0.85rem;">Forgot Password?</a>
+            </div>
+            
             <button type="submit" class="login-btn">Sign In</button>
         </form>
         

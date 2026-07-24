@@ -7,7 +7,7 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   `dept` varchar(50) NOT NULL,
-  `role` enum('admin','teacher','staff','librarian') DEFAULT 'staff',
+  `role` enum('admin','teacher','staff') DEFAULT 'staff',
   `password` varchar(255) NOT NULL,
   `first_login` tinyint(1) DEFAULT 1,
   PRIMARY KEY (`id`)

@@ -1,6 +1,5 @@
 <?php
 session_start();
-// 🔧 TIMEZONE FIX (PHP)
 date_default_timezone_set('Asia/Kolkata');
 
 if (!isset($_SESSION['user'])) {
@@ -10,10 +9,13 @@ if (!isset($_SESSION['user'])) {
 
 include 'db_connect.php';
 include 'rbac_helper.php';
-// 🔧 TIMEZONE FIX (MySQL session)
 $conn->query("SET time_zone = '+05:30'");
 
+$activePage = 'reports';
+$pageTitle = 'Reports & Analytics';
+$pageSubtitle = 'Generate and download comprehensive reports';
 
+$filterDept = getUserDept();
 
 // Get departments from departments table
 $deptQuery = "SELECT dept_code, dept_name FROM departments WHERE status = 'active' ORDER BY dept_name";
@@ -45,55 +47,73 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
     switch($reportType) {
         case 'daily':
             $date = $_GET['date'] ?? date('Y-m-d');
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = ? ORDER BY a.timestamp DESC";
+            $deptWhere = $filterDept ? " AND a.department = ?" : "";
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE DATE(a.timestamp) = ?$deptWhere ORDER BY a.timestamp DESC";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param('s', $date);
+            if ($filterDept) { $stmt->bind_param('ss', $date, $filterDept); } else { $stmt->bind_param('s', $date); }
             $stmt->execute();
             $result = $stmt->get_result();
             break;
         case 'weekly':
             $date = $_GET['date'] ?? date('Y-m-d');
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(?, 1) ORDER BY a.timestamp DESC";
+            $deptWhere = $filterDept ? " AND a.department = ?" : "";
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE YEARWEEK(a.timestamp, 1) = YEARWEEK(?, 1)$deptWhere ORDER BY a.timestamp DESC";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param('s', $date);
+            if ($filterDept) { $stmt->bind_param('ss', $date, $filterDept); } else { $stmt->bind_param('s', $date); }
             $stmt->execute();
             $result = $stmt->get_result();
             break;
         case 'monthly':
             $date = $_GET['date'] ?? date('Y-m-d');
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(?) AND YEAR(a.timestamp) = YEAR(?) ORDER BY a.timestamp DESC";
+            $deptWhere = $filterDept ? " AND a.department = ?" : "";
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid WHERE MONTH(a.timestamp) = MONTH(?) AND YEAR(a.timestamp) = YEAR(?) $deptWhere ORDER BY a.timestamp DESC";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param('ss', $date, $date);
+            if ($filterDept) { $stmt->bind_param('sss', $date, $date, $filterDept); } else { $stmt->bind_param('ss', $date, $date); }
             $stmt->execute();
             $result = $stmt->get_result();
             break;
         case 'department':
-            $dept = $_GET['dept'] ?? '';
-            if ($dept) {
-                // Fixed: Use department directly from attendance table
-                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
-                       FROM attendance a 
-                       INNER JOIN students s ON a.rfid = s.rfid 
-                       LEFT JOIN departments d ON a.department = d.dept_code 
-                       WHERE a.department = ? 
-                       ORDER BY a.timestamp DESC";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param('s', $dept);
-                $stmt->execute();
-                $result = $stmt->get_result();
-            } else {
-                $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
-                       FROM attendance a 
-                       INNER JOIN students s ON a.rfid = s.rfid 
-                       LEFT JOIN departments d ON a.department = d.dept_code 
-                       ORDER BY a.department, a.timestamp DESC";
-                $result = $conn->query($sql);
+            $dateFrom = $_GET['date_from'] ?? '';
+            $dateTo = $_GET['date_to'] ?? '';
+            $dept = $_GET['dept'] ?? ($filterDept ?? '');
+            
+            $where = "";
+            $params = [];
+            $types = '';
+            
+            if ($dept || $filterDept) {
+                $where .= " WHERE a.department = ?";
+                $params[] = $dept ?: $filterDept;
+                $types .= 's';
             }
+            if ($dateFrom) {
+                $where .= $where ? " AND DATE(a.timestamp) >= ?" : " WHERE DATE(a.timestamp) >= ?";
+                $params[] = $dateFrom;
+                $types .= 's';
+            }
+            if ($dateTo) {
+                $where .= $where ? " AND DATE(a.timestamp) <= ?" : " WHERE DATE(a.timestamp) <= ?";
+                $params[] = $dateTo;
+                $types .= 's';
+            }
+            
+            $sql = "SELECT a.name, s.roll_number, a.department, d.dept_name, a.status, a.timestamp 
+                   FROM attendance a 
+                   INNER JOIN students s ON a.rfid = s.rfid 
+                   LEFT JOIN departments d ON a.department = d.dept_code 
+                   $where 
+                   ORDER BY a.timestamp DESC";
+            $stmt = $conn->prepare($sql);
+            if ($params) {
+                $stmt->bind_param($types, ...$params);
+            }
+            $stmt->execute();
+            $result = $stmt->get_result();
             break;
         case 'student':
             $dateFrom = $_GET['date_from'] ?? '';
             $dateTo = $_GET['date_to'] ?? '';
-            $dept = $_GET['dept'] ?? '';
+            $dept = $_GET['dept'] ?? ($filterDept ?? '');
             $student = $_GET['student'] ?? '';
             
             // Individual student attendance (detailed view)
@@ -102,6 +122,11 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 $params = [$student];
                 $types = 's';
                 
+                if ($filterDept) {
+                    $where .= " AND a.department = ?";
+                    $params[] = $filterDept;
+                    $types .= 's';
+                }
                 if ($dateFrom) {
                     $where .= " AND DATE(a.timestamp) >= ?";
                     $params[] = $dateFrom;
@@ -130,8 +155,13 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                 $params = [];
                 $types = '';
                 
+                if ($filterDept) {
+                    $where .= " WHERE a.department = ?";
+                    $params[] = $filterDept;
+                    $types .= 's';
+                }
                 if ($dateFrom) {
-                    $where .= " WHERE DATE(a.timestamp) >= ?";
+                    $where .= $where ? " AND DATE(a.timestamp) >= ?" : " WHERE DATE(a.timestamp) >= ?";
                     $params[] = $dateFrom;
                     $types .= 's';
                 }
@@ -140,7 +170,7 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
                     $params[] = $dateTo;
                     $types .= 's';
                 }
-                if ($dept) {
+                if ($dept && !$filterDept) {
                     $where .= $where ? " AND a.department = ?" : " WHERE a.department = ?";
                     $params[] = $dept;
                     $types .= 's';
@@ -164,8 +194,12 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             }
             break;
         default:
-            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid ORDER BY a.timestamp DESC LIMIT 100";
-            $result = $conn->query($sql);
+            $deptWhere = $filterDept ? " WHERE a.department = ?" : "";
+            $sql = "SELECT a.name, s.roll_number, a.department, a.status, a.timestamp FROM attendance a INNER JOIN students s ON a.rfid = s.rfid$deptWhere ORDER BY a.timestamp DESC LIMIT 100";
+            $stmt = $conn->prepare($sql);
+            if ($filterDept) $stmt->bind_param('s', $filterDept);
+            $stmt->execute();
+            $result = $stmt->get_result();
             break;
     }
     
@@ -209,12 +243,24 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
         // Prepare chart data
         $chartData = [];
         if ($reportType == 'department') {
-            $dept = $_GET['dept'] ?? '';
-            if ($dept) {
-                $chartQuery = "SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN students s ON d.dept_code = s.department LEFT JOIN attendance a ON s.rfid = a.rfid WHERE d.dept_code = '$dept' GROUP BY d.id ORDER BY d.dept_name";
-            } else {
-                $chartQuery = "SELECT d.dept_name, COUNT(a.id) as count FROM departments d LEFT JOIN students s ON d.dept_code = s.department LEFT JOIN attendance a ON s.rfid = a.rfid GROUP BY d.id ORDER BY d.dept_name";
+            $dept = $_GET['dept'] ?? ($filterDept ?? '');
+            $chartDateFrom = $_GET['date_from'] ?? '';
+            $chartDateTo = $_GET['date_to'] ?? '';
+            $chartQuery = "SELECT a.status, COUNT(*) as count FROM attendance a INNER JOIN students s ON a.rfid = s.rfid";
+            $chartWhere = [];
+            if ($dept || $filterDept) {
+                $chartWhere[] = "a.department = '" . $conn->real_escape_string($dept ?: $filterDept) . "'";
             }
+            if ($chartDateFrom) {
+                $chartWhere[] = "DATE(a.timestamp) >= '" . $conn->real_escape_string($chartDateFrom) . "'";
+            }
+            if ($chartDateTo) {
+                $chartWhere[] = "DATE(a.timestamp) <= '" . $conn->real_escape_string($chartDateTo) . "'";
+            }
+            if ($chartWhere) {
+                $chartQuery .= " WHERE " . implode(" AND ", $chartWhere);
+            }
+            $chartQuery .= " GROUP BY a.status";
             $chartResult = $conn->query($chartQuery);
             while($row = $chartResult->fetch_assoc()) {
                 $chartData[] = $row;
@@ -224,6 +270,9 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
             if ($reportType == 'daily') $chartQuery .= "DATE(a.timestamp) = CURDATE()";
             elseif ($reportType == 'weekly') $chartQuery .= "YEARWEEK(a.timestamp, 1) = YEARWEEK(CURDATE(), 1)";
             else $chartQuery .= "MONTH(a.timestamp) = MONTH(CURDATE())";
+            if ($filterDept) {
+                $chartQuery .= " AND a.department = '" . $conn->real_escape_string($filterDept) . "'";
+            }
             $chartQuery .= " GROUP BY a.status";
             $chartResult = $conn->query($chartQuery);
             while($row = $chartResult->fetch_assoc()) {
@@ -351,391 +400,254 @@ if (isset($_GET['report']) && isset($_GET['format'])) {
     }
 }
 ?>
+<?php
+$pageStyles = '
+.reports-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; }
+.report-card { background: rgba(255,255,255,0.95); padding: 30px; border-radius: 20px; text-align: center; transition: all 0.3s ease; cursor: pointer; display: flex; flex-direction: column; }
+.report-card .btn { margin-top: auto; align-self: center; }
+.report-card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.15); }
+.report-icon { font-size: 3rem; margin-bottom: 20px; color: #667eea; }
+.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+.modal-content { background: white; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 30px; border-radius: 20px; width: 400px; text-align: center; max-height: 90vh; overflow-y: auto; }
+.modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
+.form-group { margin-bottom: 15px; text-align: left; }
+.form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+.form-group input, .form-group select { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; }
+.searchable-select { position: relative; }
+.search-input { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; margin-bottom: 5px; }
+.select-dropdown { max-height: 200px; overflow-y: auto; border: 2px solid #e2e8f0; border-radius: 8px; background: white; }
+.select-option { padding: 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.select-option:hover { background: #f7fafc; }
+.select-option.selected { background: #667eea; color: white; }
+.status-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+.status-in { background: #c6f6d5; color: #22543d; }
+.status-out { background: #fed7d7; color: #742a2a; }
+@media (max-width: 768px) { .reports-grid { grid-template-columns: 1fr; } }
+';
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reports - I.R.I.S</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
-        .sidebar { position: fixed; left: 0; top: 0; width: 280px; height: 100vh; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 30px 0; box-shadow: 5px 0 20px rgba(0,0,0,0.1); z-index: 1000; transition: transform 0.3s ease; }
-        .sidebar.collapsed { transform: translateX(-220px); width: 60px; }
-        .sidebar.collapsed .logo h1, .sidebar.collapsed .logo p, .sidebar.collapsed .nav-link span { display: none; }
-        .sidebar.collapsed .nav-link { justify-content: center; padding: 15px; }
-        .logo { text-align: center; padding: 0 30px 30px; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 30px; }
-        .logo h1 { font-size: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 5px; }
-        .logo p { color: #666; font-size: 0.9rem; }
-        .nav-menu { list-style: none; padding: 0 20px; }
-        .nav-item { margin-bottom: 10px; }
-        .nav-link { display: flex; align-items: center; padding: 15px 20px; color: #555; text-decoration: none; border-radius: 15px; transition: all 0.3s ease; font-weight: 500; }
-        .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; transform: translateX(5px); }
-        .nav-link i { margin-right: 12px; width: 20px; min-width: 20px; }
-        .nav-link span { transition: opacity 0.3s ease; }
-        .main-content { margin-left: 280px; padding: 30px; transition: margin-left 0.3s ease; }
-        .main-content.expanded { margin-left: 60px; }
-        .toggle-btn { position: fixed; top: 20px; left: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 1001; transition: all 0.3s ease; }
-        .toggle-btn:hover { transform: scale(1.1); }
-        .header { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 25px 30px; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .header-title h2 { color: #333; font-size: 2rem; margin-bottom: 5px; }
-        .header-title p { color: #666; }
-        .user-info { display: flex; align-items: center; gap: 15px; }
-        .user-avatar { width: 50px; height: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.2rem; }
-        .logout-btn { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 500; transition: all 0.3s ease; text-decoration: none; }
-        .logout-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(255,107,107,0.4); }
-        .card { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 30px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.3); }
-        .reports-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; }
-        .report-card { background: rgba(255,255,255,0.95); padding: 30px; border-radius: 20px; text-align: center; transition: all 0.3s ease; cursor: pointer; }
-        .report-card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.15); }
-        .report-icon { font-size: 3rem; margin-bottom: 20px; color: #667eea; }
-        .btn { padding: 12px 24px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.3); }
-        .table-container { overflow-x: auto; border-radius: 16px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th { background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%); color: white; padding: 15px 12px; text-align: left; font-weight: 600; font-size: 0.9rem; }
-        td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-        tr:hover td { background-color: #f7fafc; }
-        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
-        .status-in { background: #c6f6d5; color: #22543d; }
-        .status-out { background: #fed7d7; color: #742a2a; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-        .modal-content { background: white; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 30px; border-radius: 20px; width: 400px; text-align: center; max-height: 90vh; overflow-y: auto; }
-        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
-        .form-group { margin-bottom: 15px; text-align: left; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
-        .form-group input, .form-group select { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; }
-        .searchable-select { position: relative; }
-        .search-input { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; margin-bottom: 5px; }
-        .select-dropdown { max-height: 200px; overflow-y: auto; border: 2px solid #e2e8f0; border-radius: 8px; background: white; }
-        .select-option { padding: 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
-        .select-option:hover { background: #f7fafc; }
-        .select-option.selected { background: #667eea; color: white; }
-        @media (max-width: 1024px) { .sidebar { transform: translateX(-100%); } .sidebar.mobile-open { transform: translateX(0); } .main-content { margin-left: 0; } .header { flex-direction: column; gap: 20px; text-align: center; } .reports-grid { grid-template-columns: 1fr; } }
-    </style>
-</head>
-<body>
-    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
-    
-    <div class="sidebar" id="sidebar">
-        <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
-        <ul class="nav-menu">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
-            <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
-            <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
-            <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
-            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
-            <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
-            <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
-            <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
-            <?php endif; ?>
-        </ul>
+include 'header.php';
+?>
+
+<div class="reports-grid">
+    <div class="report-card">
+        <div class="report-icon"><i class="fas fa-calendar-day"></i></div>
+        <h3>Daily Report</h3>
+        <p>Generate today's attendance report</p>
+        <br>
+        <button onclick="showFormatDialog('daily')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
     </div>
-    
-    <div class="main-content" id="mainContent">
-        <div class="header">
-            <div class="header-title">
-                <h2>Reports & Analytics</h2>
-                <p>Generate and download comprehensive reports</p>
-            </div>
-            <div class="user-info">
-                <div class="user-avatar"><?= strtoupper(substr($_SESSION['user'], 0, 1)) ?></div>
-                <a href="logout.php" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
-            </div>
-        </div>
-        
-        <div class="reports-grid">
-            <div class="report-card">
-                <div class="report-icon"><i class="fas fa-calendar-day"></i></div>
-                <h3>Daily Report</h3>
-                <p>Generate today's attendance report</p>
-                <br>
-<button onclick="showFormatDialog('daily')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
-            </div>
-            
-            <div class="report-card">
-                <div class="report-icon"><i class="fas fa-calendar-week"></i></div>
-                <h3>Weekly Report</h3>
-                <p>Generate this week's attendance summary</p>
-                <br>
-<button onclick="showFormatDialog('weekly')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
-            </div>
-            
-            <div class="report-card">
-                <div class="report-icon"><i class="fas fa-calendar-alt"></i></div>
-                <h3>Monthly Report</h3>
-                <p>Generate monthly attendance analysis</p>
-                <br>
-<button onclick="showFormatDialog('monthly')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
-            </div>
-            
-            <div class="report-card">
-                <div class="report-icon"><i class="fas fa-building"></i></div>
-                <h3>Department Report</h3>
-                <p>Department-wise attendance breakdown</p>
-                <br>
-<button onclick="showDeptDialog('department')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
-            </div>
-            
-            <div class="report-card">
-                <div class="report-icon"><i class="fas fa-users"></i></div>
-                <h3>Student Report</h3>
-                <p>Individual student attendance records</p>
-                <br>
-<button onclick="showStudentDialog('student')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
-            </div>
-            
-
-        </div>
-        
-
-
+    <div class="report-card">
+        <div class="report-icon"><i class="fas fa-calendar-week"></i></div>
+        <h3>Weekly Report</h3>
+        <p>Generate this week's attendance summary</p>
+        <br>
+        <button onclick="showFormatDialog('weekly')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
     </div>
-    
-    <div id="formatModal" class="modal">
-        <div class="modal-content">
-            <h3><i class="fas fa-file-download"></i> Choose Download Format</h3>
-            <p>Select the format for your report:</p>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="includeChart" checked> Include Chart in PDF
-                </label>
-            </div>
-            <div class="modal-buttons">
-                <button onclick="generateReport('excel')" class="btn btn-primary">
-                    <i class="fas fa-file-excel"></i> Excel
-                </button>
-                <button onclick="generateReport('pdf')" class="btn btn-primary">
-                    <i class="fas fa-file-pdf"></i> PDF
-                </button>
-                <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">
-                    Cancel
-                </button>
-            </div>
+    <div class="report-card">
+        <div class="report-icon"><i class="fas fa-calendar-alt"></i></div>
+        <h3>Monthly Report</h3>
+        <p>Generate monthly attendance analysis</p>
+        <br>
+        <button onclick="showFormatDialog('monthly')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
+    </div>
+    <div class="report-card">
+        <div class="report-icon"><i class="fas fa-building"></i></div>
+        <h3>Department Report</h3>
+        <p>Department-wise attendance breakdown</p>
+        <br>
+        <button onclick="showDeptDialog('department')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
+    </div>
+    <div class="report-card">
+        <div class="report-icon"><i class="fas fa-users"></i></div>
+        <h3>Student Report</h3>
+        <p>Individual student attendance records</p>
+        <br>
+        <button onclick="showStudentDialog('student')" class="btn btn-primary"><i class="fas fa-download"></i> Generate</button>
+    </div>
+    <div class="report-card">
+        <div class="report-icon"><i class="fas fa-envelope"></i></div>
+        <h3>Email Report</h3>
+        <p>Send attendance report via email</p>
+        <br>
+        <a href="send_email.php" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Email</a>
+    </div>
+</div>
+
+<div id="formatModal" class="modal">
+    <div class="modal-content">
+        <h3><i class="fas fa-file-download"></i> Choose Download Format</h3>
+        <p>Select the format for your report:</p>
+        <div class="form-group">
+            <label><input type="checkbox" id="includeChart" checked> Include Chart in PDF</label>
+        </div>
+        <div class="modal-buttons">
+            <button onclick="generateReport('excel')" class="btn btn-primary"><i class="fas fa-file-excel"></i> Excel</button>
+            <button onclick="generateReport('pdf')" class="btn btn-primary"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">Cancel</button>
         </div>
     </div>
-    
-    <div id="deptModal" class="modal">
-        <div class="modal-content">
-            <h3><i class="fas fa-building"></i> Department Report</h3>
-            <div class="form-group">
-                <label>Select Department:</label>
-                <select id="deptSelect">
-                    <option value="">All Departments</option>
-                    <?php foreach($departments as $dept): ?>
-                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?></option>
-                    <?php endforeach; ?>
+</div>
+
+<div id="deptModal" class="modal">
+    <div class="modal-content">
+        <h3><i class="fas fa-building"></i> Department Report</h3>
+        <div class="form-group">
+            <label>Select Department:</label>
+            <select id="deptSelect">
+                <?php if (!$filterDept): ?>
+                <option value="">All Departments</option>
+                <?php endif; ?>
+                <?php foreach($departments as $dept): ?>
+                <?php if (!$filterDept || $dept === $filterDept): ?>
+                <option value="<?= $dept ?>" <?= $filterDept === $dept ? 'selected' : '' ?>><?= htmlspecialchars($deptNames[$dept] ?? '') ?></option>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>From Date:</label>
+            <input type="date" id="deptDateFrom">
+        </div>
+        <div class="form-group">
+            <label>To Date:</label>
+            <input type="date" id="deptDateTo">
+        </div>
+        <div class="modal-buttons">
+            <button onclick="proceedWithDept()" class="btn btn-primary">Continue</button>
+            <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="studentModal" class="modal">
+    <div class="modal-content" style="width: 500px;">
+        <h3><i class="fas fa-user"></i> Student Report</h3>
+        <div class="form-group">
+            <label>From Date:</label>
+            <input type="date" id="studentDateFrom">
+        </div>
+        <div class="form-group">
+            <label>To Date:</label>
+            <input type="date" id="studentDateTo">
+        </div>
+        <div class="form-group">
+            <label>Department:</label>
+            <select id="studentDept">
+                <?php if (!$filterDept): ?>
+                <option value="">All Departments</option>
+                <?php endif; ?>
+                <?php foreach($departments as $dept): ?>
+                <?php if (!$filterDept || $dept === $filterDept): ?>
+                <option value="<?= $dept ?>" <?= $filterDept === $dept ? 'selected' : '' ?>><?= htmlspecialchars($deptNames[$dept] ?? '') ?></option>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Select Student:</label>
+            <div class="searchable-select">
+                <input type="text" id="studentSearch" class="search-input" placeholder="Search student by name..." onkeyup="searchStudents()">
+                <select id="studentSelect" style="width: 100%;">
+                    <option value="">All Students Summary</option>
+                    <?php
+                    $studentSql = "SELECT roll_number, name, department FROM students";
+                    if ($filterDept) $studentSql .= " WHERE department = ?";
+                    $studentSql .= " ORDER BY name";
+                    $studentStmt = $conn->prepare($studentSql);
+                    if ($filterDept) $studentStmt->bind_param("s", $filterDept);
+                    $studentStmt->execute();
+                    $students = $studentStmt->get_result();
+                    while($student = $students->fetch_assoc()) {
+                        $name = htmlspecialchars($student['name']);
+                        $rn = htmlspecialchars($student['roll_number']);
+                        $dept = htmlspecialchars($student['department']);
+                        echo "<option value='{$rn}' data-dept='{$dept}'>{$name} ({$rn}) - {$dept}</option>";
+                    }
+                    ?>
                 </select>
             </div>
-            <div class="modal-buttons">
-                <button onclick="proceedWithDept()" class="btn btn-primary">Continue</button>
-                <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">Cancel</button>
-            </div>
+        </div>
+        <div class="modal-buttons">
+            <button onclick="proceedWithStudent()" class="btn btn-primary">Continue</button>
+            <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">Cancel</button>
         </div>
     </div>
-    
+</div>
 
-    
-    <div id="studentModal" class="modal">
-        <div class="modal-content" style="width: 500px;">
-            <h3><i class="fas fa-user"></i> Student Report</h3>
-            <div class="form-group">
-                <label>From Date:</label>
-                <input type="date" id="studentDateFrom">
-            </div>
-            <div class="form-group">
-                <label>To Date:</label>
-                <input type="date" id="studentDateTo">
-            </div>
-            <div class="form-group">
-                <label>Department:</label>
-                <select id="studentDept">
-                    <option value="">All Departments</option>
-                    <?php foreach($departments as $dept): ?>
-                    <option value="<?= $dept ?>"><?= $deptNames[$dept] ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Select Student:</label>
-                <div class="searchable-select">
-                    <input type="text" id="studentSearch" class="search-input" placeholder="Search student by name..." onkeyup="searchStudents()">
-                    <select id="studentSelect" style="width: 100%;">
-                        <option value="">All Students Summary</option>
-                        <?php
-                        $students = $conn->query("SELECT roll_number, name, department FROM students ORDER BY name");
-                        while($student = $students->fetch_assoc()) {
-                            echo "<option value='{$student['roll_number']}' data-dept='{$student['department']}'>{$student['name']} ({$student['roll_number']}) - {$student['department']}</option>";
-                        }
-                        ?>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-buttons">
-                <button onclick="proceedWithStudent()" class="btn btn-primary">Continue</button>
-                <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #555;">Cancel</button>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        let selectedReport = '';
-        
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-            sidebar.classList.toggle('collapsed');
-            mainContent.classList.toggle('expanded');
-            if (window.innerWidth <= 1024) sidebar.classList.toggle('mobile-open');
-        }
-        
-        function showFormatDialog(reportType) {
-            selectedReport = reportType;
-            document.getElementById('formatModal').style.display = 'block';
-        }
-        
+<?php
+$pageScripts = '
+let selectedReport = "";
 
-        
+function showFormatDialog(reportType) {
+    selectedReport = reportType;
+    document.getElementById("formatModal").style.display = "block";
+}
+function closeModal() {
+    document.getElementById("formatModal").style.display = "none";
+    document.getElementById("deptModal").style.display = "none";
+    document.getElementById("studentModal").style.display = "none";
+}
+function showDeptDialog(reportType) {
+    selectedReport = reportType;
+    document.getElementById("deptModal").style.display = "block";
+}
+function showStudentDialog(reportType) {
+    selectedReport = reportType;
+    document.getElementById("studentModal").style.display = "block";
+}
+function proceedWithDept() {
+    const dept = document.getElementById("deptSelect").value;
+    const dateFrom = document.getElementById("deptDateFrom").value;
+    const dateTo = document.getElementById("deptDateTo").value;
+    let params = [];
+    if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+    if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+    if (dept) params.push(`dept=${encodeURIComponent(dept)}`);
+    selectedReport = params.length ? `department&${params.join("&")}` : "department";
+    closeModal();
+    showFormatDialog(selectedReport);
+}
+function proceedWithStudent() {
+    const dateFrom = document.getElementById("studentDateFrom").value;
+    const dateTo = document.getElementById("studentDateTo").value;
+    const dept = document.getElementById("studentDept").value;
+    const student = document.getElementById("studentSelect").value;
+    let params = [];
+    if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+    if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+    if (dept) params.push(`dept=${encodeURIComponent(dept)}`);
+    if (student) params.push(`student=${encodeURIComponent(student)}`);
+    selectedReport = params.length ? `student&${params.join("&")}` : "student";
+    closeModal();
+    showFormatDialog(selectedReport);
+}
+function filterStudents() {
+    const deptFilter = document.getElementById("studentDept").value;
+    const sel = document.getElementById("studentSelect");
+    for (let i = 1; i < sel.options.length; i++) {
+        sel.options[i].style.display = !deptFilter || sel.options[i].getAttribute("data-dept") === deptFilter ? "block" : "none";
+    }
+}
+function searchStudents() {
+    const term = document.getElementById("studentSearch").value.toLowerCase();
+    const sel = document.getElementById("studentSelect");
+    for (let i = 1; i < sel.options.length; i++) {
+        sel.options[i].style.display = sel.options[i].textContent.toLowerCase().includes(term) ? "block" : "none";
+    }
+}
+function generateReport(format) {
+    let url = `?report=${encodeURIComponent(selectedReport)}&format=${format}`;
+    if (format === "pdf") url += `&chart=${document.getElementById("includeChart").checked ? "1" : "0"}`;
+    if (format === "excel") { window.location.href = url; } else { window.open(url, "_blank").focus(); }
+    closeModal();
+}
+document.addEventListener("DOMContentLoaded", function() {
+    const ds = document.getElementById("studentDept");
+    if (ds) ds.addEventListener("change", function() { filterStudents(); document.getElementById("studentSearch").value = ""; searchStudents(); });
+    const sm = document.getElementById("studentModal");
+    if (sm) new MutationObserver(function(m) { m.forEach(function(mut) { if (mut.type === "attributes" && mut.attributeName === "style" && sm.style.display === "block") document.getElementById("studentSearch").value = ""; }); }).observe(sm, { attributes: true });
+});
+window.onclick = function(e) { ["formatModal","deptModal","studentModal"].forEach(function(id) { if (e.target == document.getElementById(id)) closeModal(); }); };
+';
 
-        
-        function closeModal() {
-            document.getElementById('formatModal').style.display = 'none';
-            document.getElementById('deptModal').style.display = 'none';
-            document.getElementById('studentModal').style.display = 'none';
-        }
-        
-        function showDeptDialog(reportType) {
-            selectedReport = reportType;
-            document.getElementById('deptModal').style.display = 'block';
-        }
-        
-
-        
-        function showStudentDialog(reportType) {
-            selectedReport = reportType;
-            document.getElementById('studentModal').style.display = 'block';
-        }
-        
-        function proceedWithDept() {
-            const dept = document.getElementById('deptSelect').value;
-            if (dept) {
-                selectedReport = `department&dept=${encodeURIComponent(dept)}`;
-            } else {
-                selectedReport = 'department';
-            }
-            closeModal();
-            showFormatDialog(selectedReport);
-        }
-        
-
-        
-        function proceedWithStudent() {
-            const dateFrom = document.getElementById('studentDateFrom').value;
-            const dateTo = document.getElementById('studentDateTo').value;
-            const dept = document.getElementById('studentDept').value;
-            const student = document.getElementById('studentSelect').value;
-            let params = [];
-            if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
-            if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
-            if (dept) params.push(`dept=${encodeURIComponent(dept)}`);
-            if (student) params.push(`student=${encodeURIComponent(student)}`);
-            selectedReport = params.length ? `student&${params.join('&')}` : 'student';
-            closeModal();
-            showFormatDialog(selectedReport);
-        }
-        
-        function filterStudents() {
-            const deptFilter = document.getElementById('studentDept').value;
-            const studentSelect = document.getElementById('studentSelect');
-            const options = studentSelect.getElementsByTagName('option');
-            
-            for (let i = 1; i < options.length; i++) {
-                const option = options[i];
-                const optionDept = option.getAttribute('data-dept');
-                
-                if (!deptFilter || optionDept === deptFilter) {
-                    option.style.display = 'block';
-                } else {
-                    option.style.display = 'none';
-                }
-            }
-        }
-        
-        function searchStudents() {
-            const searchTerm = document.getElementById('studentSearch').value.toLowerCase();
-            const studentSelect = document.getElementById('studentSelect');
-            const options = studentSelect.getElementsByTagName('option');
-            
-            for (let i = 1; i < options.length; i++) {
-                const option = options[i];
-                const optionText = option.textContent.toLowerCase();
-                
-                if (optionText.includes(searchTerm)) {
-                    option.style.display = 'block';
-                } else {
-                    option.style.display = 'none';
-                }
-            }
-        }
-        
-
-        
-        function generateReport(format) {
-            let url = `?report=${encodeURIComponent(selectedReport)}&format=${format}`;
-            if (format === 'pdf') {
-                const includeChart = document.getElementById('includeChart').checked;
-                url += `&chart=${includeChart ? '1' : '0'}`;
-            }
-            if (format === 'excel') {
-                window.location.href = url;
-            } else {
-                const printWindow = window.open(url, '_blank');
-                printWindow.focus();
-            }
-            closeModal();
-        }
-        
-        // Add event listeners for department filters and search functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const studentDeptSelect = document.getElementById('studentDept');
-            if (studentDeptSelect) {
-                studentDeptSelect.addEventListener('change', function() {
-                    filterStudents();
-                    // Clear search when department changes
-                    document.getElementById('studentSearch').value = '';
-                    searchStudents();
-                });
-            }
-            
-            // Clear search when student modal opens
-            const studentModal = document.getElementById('studentModal');
-            if (studentModal) {
-                const observer = new MutationObserver(function(mutations) {
-                    mutations.forEach(function(mutation) {
-                        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                            if (studentModal.style.display === 'block') {
-                                document.getElementById('studentSearch').value = '';
-                            }
-                        }
-                    });
-                });
-                observer.observe(studentModal, { attributes: true });
-            }
-        });
-        
-        window.onclick = function(event) {
-            const modals = ['formatModal', 'deptModal', 'studentModal'];
-            modals.forEach(modalId => {
-                const modal = document.getElementById(modalId);
-                if (event.target == modal) {
-                    closeModal();
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+include 'footer.php';

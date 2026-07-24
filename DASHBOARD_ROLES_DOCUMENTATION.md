@@ -48,15 +48,7 @@ This document describes the role-specific dashboard implementation for the I.R.I
 - Cannot add/edit/delete students
 - Cannot access library or user management
 
-### 4. Librarian
-- **Access Level**: Library-only
-- **Department**: None
-- **Dashboard**: `librarian_dashboard.php`
-- **Permissions**: Library management only
-
-**Features:**
-- View library statistics
-- Issue/return books
+*(Librarian role has been removed)*
 - Manage library catalog
 - View book issues and returns
 - No access to attendance or student data
@@ -84,12 +76,7 @@ This document describes the role-specific dashboard implementation for the I.R.I
 - Recent activity feed (attendance only)
 - Navigation: Dashboard, Attendance, Reports, Settings
 
-### librarian_dashboard.php
-- Library-specific overview
-- Book statistics
-- Quick actions for library management
-- Recent activity feed (library only)
-- Navigation: Library, Books, Issue Book, Return Book, Settings
+*(librarian_dashboard.php removed - role removed)*
 
 ## Database Changes
 
@@ -99,7 +86,7 @@ CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     dept VARCHAR(50) NOT NULL,
-    role ENUM('admin', 'hod', 'teacher', 'staff', 'librarian') NOT NULL,
+    role ENUM('admin', 'hod', 'teacher', 'staff') NOT NULL,
     password VARCHAR(20) NOT NULL,
     first_login BOOLEAN DEFAULT TRUE
 );
@@ -113,21 +100,22 @@ Run `update_users_for_hod.sql` to:
 
 ## Permission Matrix
 
-| Permission | Admin | HOD | Teacher | Staff | Librarian |
+| Permission | Admin | HOD | Teacher | Staff |
 |------------|-------|-----|---------|-------|-----------|
-| view_dashboard | ✅ | ✅ | ✅ | ✅ | ✅ |
-| view_all_reports | ✅ | ✅ | ❌ | ❌ | ❌ |
-| add_student | ✅ | ✅ | ❌ | ❌ | ❌ |
-| edit_student | ✅ | ✅ | ❌ | ❌ | ❌ |
-| delete_student | ✅ | ✅ | ❌ | ❌ | ❌ |
-| view_all_students | ✅ | ✅ | ✅ | ✅ | ✅ |
-| view_department_students | ❌ | ✅ | ✅ | ✅ | ❌ |
-| mark_attendance | ✅ | ✅ | ✅ | ✅ | ❌ |
-| view_attendance | ✅ | ✅ | ✅ | ✅ | ✅ |
-| view_department_attendance | ❌ | ✅ | ✅ | ✅ | ❌ |
-| view_library | ✅ | ❌ | ❌ | ❌ | ✅ |
-| manage_users | ✅ | ❌ | ❌ | ❌ | ❌ |
-| manage_departments | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Permission | Admin | HOD | Teacher | Staff |
+|------------|-------|-----|---------|-------|
+| view_dashboard | ✅ | ✅ | ✅ | ✅ |
+| view_all_reports | ✅ | ✅ | ❌ | ❌ |
+| add_student | ✅ | ✅ | ❌ | ❌ |
+| edit_student | ✅ | ✅ | ❌ | ❌ |
+| delete_student | ✅ | ✅ | ❌ | ❌ |
+| view_all_students | ✅ | ✅ | ✅ | ✅ |
+| view_department_students | ❌ | ✅ | ✅ | ✅ |
+| mark_attendance | ✅ | ✅ | ✅ | ✅ |
+| view_attendance | ✅ | ✅ | ✅ | ✅ |
+| view_department_attendance | ❌ | ✅ | ✅ | ✅ |
+| manage_users | ✅ | ❌ | ❌ | ❌ |
+| manage_departments | ✅ | ❌ | ❌ | ❌ |
 
 ## Implementation Details
 
@@ -145,9 +133,7 @@ if (isAdministrator()) {
     header("Location: hod_dashboard.php");
 } elseif (isTeacher() || isStaff()) {
     header("Location: teacher_dashboard.php");
-} elseif (isLibrarian()) {
-    header("Location: librarian_dashboard.php");
-}
+} // Librarian role removed
 ```
 
 ### Department Filtering
@@ -168,7 +154,7 @@ $totalStudents = $conn->query("SELECT COUNT(*) FROM students WHERE department = 
    - Admin users should have `role = 'admin'`
    - HOD users should have `role = 'hod'` and `dept = 'Department Name'`
    - Teacher/Staff users should have `role = 'teacher'` or `role = 'staff'` and `dept = 'Department Name'`
-   - Librarian users should have `role = 'librarian'`
+   - *(Librarian role removed)*
 
 3. **Test the system:**
    - Login as each role type

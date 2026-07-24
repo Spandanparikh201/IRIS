@@ -1,9 +1,21 @@
 <?php
+session_set_cookie_params([
+    'httponly' => true,
+    'samesite' => 'Strict',
+    'secure' => true,
+]);
+
 session_start();
+
 include 'db_connect.php';
 
-$username = $_POST['username'];
-$password = $_POST['password'];
+$username = trim($_POST['username'] ?? '');
+$password = $_POST['password'] ?? '';
+
+if ($username === '' || $password === '') {
+    echo "<script>alert('Username and password are required'); window.location.href='login.php';</script>";
+    exit;
+}
 
 $stmt = $conn->prepare("SELECT * FROM users WHERE name = ?");
 $stmt->bind_param("s", $username);
@@ -12,7 +24,21 @@ $result = $stmt->get_result();
 
 if ($result->num_rows === 1) {
     $user = $result->fetch_assoc();
-    if ($password === $user['password']) {
+    $storedHash = $user['password'];
+    $valid = false;
+    if (strlen($storedHash) > 0 && $storedHash[0] === '$') {
+        $valid = password_verify($password, $storedHash);
+    } else {
+        $valid = ($password === $storedHash);
+        if ($valid) {
+            $newHash = password_hash($password, PASSWORD_BCRYPT);
+            $upgrade = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $upgrade->bind_param("si", $newHash, $user['id']);
+            $upgrade->execute();
+        }
+    }
+    if ($valid) {
+        session_regenerate_id(true);
         $_SESSION['user'] = $user['name'];
         $_SESSION['user_id'] = $user['id'] ?? 1;
         $_SESSION['user_role'] = $user['role'] ?? 'staff';
@@ -24,7 +50,6 @@ if ($result->num_rows === 1) {
             exit(0);
         }
         
-        // Redirect to main dashboard
         header("Location: dashboard.php");
         exit(0);
     }

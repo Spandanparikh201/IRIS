@@ -14,11 +14,30 @@ include 'rbac.php';
  * @param string $redirectUrl URL to redirect to if no permission (optional)
  * @return bool True if user has permission
  */
+function safeRedirect($url) {
+    $url = str_replace(["\r", "\n"], '', $url);
+    header("Location: $url");
+    exit();
+}
+
+function csrf_token() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return '<input type="hidden" name="csrf_token" value="' . $_SESSION['csrf_token'] . '">';
+}
+
+function verify_csrf() {
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
+        http_response_code(403);
+        die("Invalid or expired request. Please go back and try again.");
+    }
+}
+
 function checkPermission($permission, $redirectUrl = null) {
     if (!isset($_SESSION['user'])) {
         if ($redirectUrl) {
-            header("Location: $redirectUrl");
-            exit();
+            safeRedirect($redirectUrl);
         }
         return false;
     }
@@ -26,8 +45,7 @@ function checkPermission($permission, $redirectUrl = null) {
     if (!hasPermission($_SESSION, $permission)) {
         if ($redirectUrl) {
             $_SESSION['error'] = 'You do not have permission to access this page.';
-            header("Location: $redirectUrl");
-            exit();
+            safeRedirect($redirectUrl);
         }
         return false;
     }
@@ -40,7 +58,7 @@ function checkPermission($permission, $redirectUrl = null) {
  * 
  * @param string $redirectUrl URL to redirect to if not admin
  */
-function requireAdmin($redirectUrl = 'admin_dashboard.php') {
+function requireAdmin($redirectUrl = 'dashboard.php') {
     checkPermission('manage_users', $redirectUrl);
 }
 
@@ -49,141 +67,31 @@ function requireAdmin($redirectUrl = 'admin_dashboard.php') {
  * 
  * @param string $redirectUrl URL to redirect to if not authorized
  */
-function requireTeacherOrAdmin($redirectUrl = 'teacher_dashboard.php') {
+function requireTeacherOrAdmin($redirectUrl = 'dashboard.php') {
     if (!isset($_SESSION['user'])) {
-        header("Location: $redirectUrl");
-        exit();
+        safeRedirect($redirectUrl);
     }
     
     $role = $_SESSION['user_role'] ?? 'staff';
     if ($role !== 'admin' && $role !== 'teacher') {
         if ($redirectUrl) {
             $_SESSION['error'] = 'You do not have permission to access this page.';
-            header("Location: $redirectUrl");
-            exit();
+            safeRedirect($redirectUrl);
         }
     }
 }
 
 /**
- * Require librarian access
- * 
- * @param string $redirectUrl URL to redirect to if not librarian
+ * Get department filter for non-admin users.
+ * Returns the user's department (teacher/staff/HOD see only their own),
+ * or null for admin (sees all).
+ *
+ * @return string|null Department code or null for no filter
  */
-function requireLibrarian($redirectUrl = 'librarian_dashboard.php') {
-    checkPermission('manage_library', $redirectUrl);
-}
-
-/**
- * Get user's role name
- * 
- * @return string User's role name
- */
-function getUserRole() {
-    return $_SESSION['user_role'] ?? 'staff';
-}
-
-/**
- * Get user's department
- * 
- * @return string User's department
- */
-function getUserDepartment() {
-    return $_SESSION['user_dept'] ?? 'General';
-}
-
-/**
- * Check if user can access a specific page
- * 
- * @param string $page The page name (file name without .php)
- * @return bool True if user can access the page
- */
-function canAccess($page) {
-    if (!isset($_SESSION['user'])) {
-        return false;
+function getUserDept() {
+    if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin') {
+        return null;
     }
-    
-    return canAccessPage($_SESSION, $page);
-}
-
-/**
- * Filter menu items based on user permissions
- * 
- * @param array $menuItems Array of menu items
- * @return array Filtered menu items
- */
-function filterMenu($menuItems) {
-    if (!isset($_SESSION['user'])) {
-        return [];
-    }
-    
-    return filterMenuByPermissions($_SESSION, $menuItems);
-}
-
-/**
- * Get user's enabled permissions
- * 
- * @return array Array of enabled permission names
- */
-function getEnabledPermissions() {
-    if (!isset($_SESSION['user'])) {
-        return [];
-    }
-    
-    return getUserEnabledPermissions($_SESSION);
-}
-
-/**
- * Check if user is admin
- * 
- * @return bool True if user is admin
- */
-function isAdministrator() {
-    return $_SESSION['user_role'] ?? '' === 'admin';
-}
-
-/**
- * Check if user is admin
- * 
- * @return bool True if user is admin
- */
-function isAdmin() {
-    return $_SESSION['user_role'] ?? '' === 'admin';
-}
-
-/**
- * Check if user is HOD
- * 
- * @return bool True if user is HOD
- */
-function isHOD() {
-    return $_SESSION['user_role'] ?? '' === 'hod';
-}
-
-/**
- * Check if user is teacher
- * 
- * @return bool True if user is teacher
- */
-function isTeacher() {
-    return $_SESSION['user_role'] ?? '' === 'teacher';
-}
-
-/**
- * Check if user is staff
- * 
- * @return bool True if user is staff
- */
-function isStaff() {
-    return $_SESSION['user_role'] ?? '' === 'staff';
-}
-
-/**
- * Check if user is librarian
- * 
- * @return bool True if user is librarian
- */
-function isLibrarian() {
-    return $_SESSION['user_role'] ?? '' === 'librarian';
+    return $_SESSION['user_dept'] ?? null;
 }
 ?>

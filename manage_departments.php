@@ -14,6 +14,7 @@ $conn->query("SET time_zone = '+05:30'");
 
 // Handle form submissions
 if ($_POST) {
+    verify_csrf();
     if (isset($_POST['add_dept'])) {
         $stmt = $conn->prepare("INSERT INTO departments (dept_code, dept_name, dept_head, contact_email, contact_phone, building, floor_number) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->bind_param("ssssssi", $_POST['dept_code'], $_POST['dept_name'], $_POST['dept_head'], $_POST['contact_email'], $_POST['contact_phone'], $_POST['building'], $_POST['floor_number']);
@@ -32,91 +33,22 @@ if ($_POST) {
         }
     }
 }
-?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Departments - I.R.I.S</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
-        .sidebar { position: fixed; left: 0; top: 0; width: 280px; height: 100vh; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 30px 0; box-shadow: 5px 0 20px rgba(0,0,0,0.1); z-index: 1000; transition: transform 0.3s ease; }
-        .sidebar.collapsed { transform: translateX(-220px); width: 60px; }
-        .sidebar.collapsed .logo h1, .sidebar.collapsed .logo p, .sidebar.collapsed .nav-link span { display: none; }
-        .sidebar.collapsed .nav-link { justify-content: center; padding: 15px; }
-        .logo { text-align: center; padding: 0 30px 30px; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 30px; }
-        .logo h1 { font-size: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 5px; }
-        .logo p { color: #666; font-size: 0.9rem; }
-        .nav-menu { list-style: none; padding: 0 20px; }
-        .nav-item { margin-bottom: 10px; }
-        .nav-link { display: flex; align-items: center; padding: 15px 20px; color: #555; text-decoration: none; border-radius: 15px; transition: all 0.3s ease; font-weight: 500; }
-        .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; transform: translateX(5px); }
-        .nav-link i { margin-right: 12px; width: 20px; min-width: 20px; }
-        .nav-link span { transition: opacity 0.3s ease; }
-        .main-content { margin-left: 280px; padding: 30px; transition: margin-left 0.3s ease; }
-        .main-content.expanded { margin-left: 60px; }
-        .toggle-btn { position: fixed; top: 20px; left: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 1001; transition: all 0.3s ease; }
-        .toggle-btn:hover { transform: scale(1.1); }
-        .header { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); padding: 25px 30px; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .card { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 30px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        .btn { padding: 12px 24px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .btn-success { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
-        .form-control { width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 1rem; }
-        .form-control:focus { outline: none; border-color: #667eea; }
-        .table-responsive { overflow-x: auto; border-radius: 16px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th { background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%); color: white; padding: 15px 12px; text-align: left; font-weight: 600; }
-        td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-        tr:hover td { background-color: #f7fafc; }
-        .status-active { background: #c6f6d5; color: #22543d; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
-        .status-inactive { background: #fed7d7; color: #742a2a; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
-        .row { display: flex; gap: 20px; }
-        .col-md-6 { flex: 1; }
-        .col-md-4 { flex: 1; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-        .modal-content { background: white; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 30px; border-radius: 20px; width: 600px; max-height: 90vh; overflow-y: auto; }
-        @media (max-width: 1024px) { .sidebar { transform: translateX(-100%); } .sidebar.mobile-open { transform: translateX(0); } .main-content { margin-left: 0; } .header { flex-direction: column; gap: 20px; text-align: center; } }
-    </style>
-</head>
-<body>
-    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
-    
-    <div class="sidebar" id="sidebar">
-        <div class="logo"><h1>I.R.I.S</h1><p>Dashboard</p></div>
-        <ul class="nav-menu">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a></li>
-            <li class="nav-item"><a href="add_student.php" class="nav-link"><i class="fas fa-users"></i><span>Students</span></a></li>
-            <li class="nav-item"><a href="attendance.php" class="nav-link"><i class="fas fa-calendar-check"></i><span>Attendance</span></a></li>
-            <li class="nav-item"><a href="reports.php" class="nav-link"><i class="fas fa-chart-pie"></i><span>Reports</span></a></li>
-            <li class="nav-item"><a href="library.php" class="nav-link"><i class="fas fa-book"></i><span>Library</span></a></li>
-            <li class="nav-item"><a href="manage_departments.php" class="nav-link active"><i class="fas fa-building"></i><span>Departments</span></a></li>
-            <li class="nav-item"><a href="settings.php" class="nav-link"><i class="fas fa-cog"></i><span>Settings</span></a></li>
-            <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 'admin'): ?>
-            <li class="nav-item"><a href="manage_users.php" class="nav-link"><i class="fas fa-users-cog"></i><span>Manage Users</span></a></li>
-            <?php endif; ?>
-        </ul>
-    </div>
-    
-    <div class="main-content" id="mainContent">
-        <div class="header">
-            <div>
-                <h2>🏢 Department Management</h2>
-                <p>Manage departments and their information</p>
-            </div>
-            <button onclick="showAddModal()" class="btn btn-primary">
-                <i class="fas fa-plus"></i> Add Department
-            </button>
-        </div>
+$activePage = 'manage_departments';
+$pageTitle = 'Manage Departments';
+$pageSubtitle = '';
+$pageStyles = '.status-active { background: #c6f6d5; color: #22543d; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+.status-inactive { background: #fed7d7; color: #742a2a; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+.modal-content { background: white; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 30px; border-radius: 20px; width: 600px; max-height: 90vh; overflow-y: auto; }';
+include 'header.php';
+?>
         
         <div class="card">
-            <h3>📊 Department Overview</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="font-size: 1.5rem;">📊 Department Overview</h3>
+                <button onclick="showAddModal()" class="btn btn-primary"><i class="fas fa-plus"></i> Add Department</button>
+            </div>
             <div class="table-responsive">
                 <table>
                     <thead>
@@ -136,22 +68,35 @@ if ($_POST) {
                         $result = $conn->query("SELECT d.*, 
                                                (SELECT COUNT(*) FROM students s WHERE s.department = d.dept_code) as student_count 
                                                FROM departments d ORDER BY d.dept_name");
+                        if ($result):
                         while ($row = $result->fetch_assoc()) {
+                            $dc = htmlspecialchars($row['dept_code'], ENT_QUOTES);
+                            $dn = htmlspecialchars($row['dept_name'], ENT_QUOTES);
+                            $dh = htmlspecialchars($row['dept_head'] ?? '', ENT_QUOTES);
+                            $ce = htmlspecialchars($row['contact_email'] ?? '', ENT_QUOTES);
+                            $cp = htmlspecialchars($row['contact_phone'] ?? '', ENT_QUOTES);
+                            $bl = htmlspecialchars($row['building'] ?? '', ENT_QUOTES);
+                            $fl = htmlspecialchars($row['floor_number'] ?? '', ENT_QUOTES);
+                            $st = htmlspecialchars($row['status'] ?? '', ENT_QUOTES);
+                            $sc = htmlspecialchars($row['student_count'] ?? '0', ENT_QUOTES);
                             echo "<tr>
-                                <td><strong>{$row['dept_code']}</strong></td>
-                                <td>{$row['dept_name']}</td>
-                                <td>{$row['dept_head']}</td>
-                                <td><span class='status-active'>{$row['student_count']} Students</span></td>
-                                <td>{$row['contact_email']}<br><small>{$row['contact_phone']}</small></td>
-                                <td>{$row['building']} - Floor {$row['floor_number']}</td>
-                                <td><span class='status-{$row['status']}'>" . ucfirst($row['status']) . "</span></td>
+                                <td><strong>$dc</strong></td>
+                                <td>$dn</td>
+                                <td>$dh</td>
+                                <td><span class='status-active'>$sc Students</span></td>
+                                <td>$ce<br><small>$cp</small></td>
+                                <td>$bl - Floor $fl</td>
+                                <td><span class='status-$st'>" . ucfirst($st) . "</span></td>
                                 <td>
-                                    <button onclick='editDept(" . json_encode($row) . ")' class='btn btn-success' style='padding: 8px 12px; font-size: 0.9rem;'>
+                                    <button onclick='editDept(" . htmlspecialchars(json_encode($row), ENT_QUOTES, "UTF-8") . ")' class='btn btn-success' style='padding: 8px 12px; font-size: 0.9rem;'>
                                         <i class='fas fa-edit'></i> Edit
                                     </button>
                                 </td>
                             </tr>";
                         }
+                        else:
+                        echo "<tr><td colspan='8' style='text-align:center;padding:30px;color:#999;'>No departments found.</td></tr>";
+                        endif;
                         ?>
                     </tbody>
                 </table>
@@ -164,6 +109,7 @@ if ($_POST) {
         <div class="modal-content">
             <h3><i class="fas fa-plus"></i> Add New Department</h3>
             <form method="POST">
+                <?= csrf_token() ?>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="form-group">
@@ -223,6 +169,7 @@ if ($_POST) {
         <div class="modal-content">
             <h3><i class="fas fa-edit"></i> Edit Department</h3>
             <form method="POST" id="editForm">
+                <?= csrf_token() ?>
                 <input type="hidden" name="dept_id" id="edit_dept_id">
                 <div class="form-group">
                     <label>Department Code</label>
@@ -281,45 +228,28 @@ if ($_POST) {
         </div>
     </div>
     
-    <script>
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-            sidebar.classList.toggle('collapsed');
-            mainContent.classList.toggle('expanded');
-            if (window.innerWidth <= 1024) sidebar.classList.toggle('mobile-open');
-        }
-        
-        function showAddModal() {
-            document.getElementById('addModal').style.display = 'block';
-        }
-        
-        function editDept(dept) {
-            document.getElementById('edit_dept_id').value = dept.id;
-            document.getElementById('edit_dept_code').value = dept.dept_code;
-            document.getElementById('edit_dept_name').value = dept.dept_name;
-            document.getElementById('edit_dept_head').value = dept.dept_head || '';
-            document.getElementById('edit_contact_email').value = dept.contact_email || '';
-            document.getElementById('edit_contact_phone').value = dept.contact_phone || '';
-            document.getElementById('edit_building').value = dept.building || '';
-            document.getElementById('edit_floor_number').value = dept.floor_number || '';
-            document.getElementById('edit_status').value = dept.status;
-            document.getElementById('editModal').style.display = 'block';
-        }
-        
-        function closeModal() {
-            document.getElementById('addModal').style.display = 'none';
-            document.getElementById('editModal').style.display = 'none';
-        }
-        
-        window.onclick = function(event) {
-            const addModal = document.getElementById('addModal');
-            const editModal = document.getElementById('editModal');
-            if (event.target == addModal) closeModal();
-            if (event.target == editModal) closeModal();
-        }
-    </script>
-</body>
-</html>
+<?php $pageScripts = '
+function showAddModal() { document.getElementById("addModal").style.display = "block"; }
+function editDept(dept) {
+    document.getElementById("edit_dept_id").value = dept.id;
+    document.getElementById("edit_dept_code").value = dept.dept_code;
+    document.getElementById("edit_dept_name").value = dept.dept_name;
+    document.getElementById("edit_dept_head").value = dept.dept_head || "";
+    document.getElementById("edit_contact_email").value = dept.contact_email || "";
+    document.getElementById("edit_contact_phone").value = dept.contact_phone || "";
+    document.getElementById("edit_building").value = dept.building || "";
+    document.getElementById("edit_floor_number").value = dept.floor_number || "";
+    document.getElementById("edit_status").value = dept.status;
+    document.getElementById("editModal").style.display = "block";
+}
+function closeModal() {
+    document.getElementById("addModal").style.display = "none";
+    document.getElementById("editModal").style.display = "none";
+}
+window.onclick = function(event) {
+    if (event.target == document.getElementById("addModal") || event.target == document.getElementById("editModal")) closeModal();
+};
+'; ?>
+<?php include 'footer.php'; ?>
 
 

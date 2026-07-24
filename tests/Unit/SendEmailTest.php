@@ -18,13 +18,6 @@ final class SendEmailTest extends TestCase
         $this->assertFalse($allowed);
     }
 
-    public function test_librarian_cannot_send_email(): void
-    {
-        $role = 'librarian';
-        $allowed = in_array($role, ['admin', 'teacher']);
-        $this->assertFalse($allowed);
-    }
-
     public function test_date_filter_query_format(): void
     {
         $date = '2026-06-10';

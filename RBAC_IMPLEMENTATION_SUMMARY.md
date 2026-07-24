@@ -5,7 +5,7 @@
 ### 1. **RBAC Core Files Created**
 
 #### **rbac.php** - Main RBAC Configuration
-- Defines all permissions for each role (admin, teacher, staff, librarian)
+- Defines all permissions for each role (admin, teacher, staff)
 - Contains permission checking functions
 - Role management functions
 - Permission descriptions
@@ -50,11 +50,7 @@
 - Limited report generation
 - Cannot manage users or departments
 
-### **Librarian (librarian)**
-- Can manage library system
-- Can issue and return books
-- Can add books
-- Cannot manage students or attendance
+*(Librarian role has been removed)*
 
 ## 🔐 Permission Categories
 
@@ -178,21 +174,18 @@ if (checkPermission('new_permission')) {
 
 ## 📊 Permission Matrix
 
-| Permission | Admin | Teacher | Staff | Librarian |
-|------------|-------|---------|-------|-----------|
-| View Dashboard | ✅ | ✅ | ✅ | ✅ |
-| View All Reports | ✅ | ✅ | ❌ | ❌ |
-| Add Student | ✅ | ✅ | ❌ | ❌ |
-| Edit Student | ✅ | ✅ | ❌ | ❌ |
-| Delete Student | ✅ | ❌ | ❌ | ❌ |
-| Mark Attendance | ✅ | ✅ | ✅ | ❌ |
-| Generate Reports | ✅ | ✅ | ❌ | ❌ |
-| Manage Users | ✅ | ❌ | ❌ | ❌ |
-| Manage Departments | ✅ | ❌ | ❌ | ❌ |
-| Add Book | ✅ | ❌ | ❌ | ✅ |
-| Issue Book | ✅ | ✅ | ❌ | ✅ |
-| Return Book | ✅ | ✅ | ❌ | ✅ |
-| Change Password | ✅ | ✅ | ✅ | ✅ |
+| Permission | Admin | Teacher | Staff |
+|------------|-------|---------|-------|
+| View Dashboard | ✅ | ✅ | ✅ |
+| View All Reports | ✅ | ✅ | ❌ |
+| Add Student | ✅ | ✅ | ❌ |
+| Edit Student | ✅ | ✅ | ❌ |
+| Delete Student | ✅ | ❌ | ❌ |
+| Mark Attendance | ✅ | ✅ | ✅ |
+| Generate Reports | ✅ | ✅ | ❌ |
+| Manage Users | ✅ | ❌ | ❌ |
+| Manage Departments | ✅ | ❌ | ❌ |
+| Change Password | ✅ | ✅ | ✅ |
 
 ## 🛡️ Security Features
 

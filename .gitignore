@@ -13,5 +13,13 @@ send_email.php
 Final_IRIS.ino
 debug_log.txt
 
+# Backups
+backups/
+
 # IDE
 .idea/
+.amazonq/
+
+# OS artifacts
+.DS_Store
+*.log

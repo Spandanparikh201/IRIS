@@ -6,24 +6,31 @@ if (!isset($_SESSION['user'])) {
 }
 
 include 'db_connect.php';
+include 'rbac_helper.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    verify_csrf();
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
     
-    if ($new_password === $confirm_password && strlen($new_password) >= 6) {
-        $stmt = $conn->prepare("UPDATE users SET password = ?, first_login = FALSE WHERE id = ?");
-        $stmt->bind_param("si", $new_password, $_SESSION['user_id']);
-        
-        if ($stmt->execute()) {
-            unset($_SESSION['force_password_reset']);
-            echo "<script>alert('Password updated successfully!'); window.location.href='dashboard.php';</script>";
-            exit();
+    if ($new_password === $confirm_password && strlen($new_password) >= 8) {
+        if (!preg_match('/[A-Z]/', $new_password) || !preg_match('/[a-z]/', $new_password) || !preg_match('/[0-9]/', $new_password)) {
+            $error = "Password must contain uppercase, lowercase, and a digit.";
         } else {
-            $error = "Failed to update password";
+            $hashedPassword = password_hash($new_password, PASSWORD_BCRYPT);
+            $stmt = $conn->prepare("UPDATE users SET password = ?, first_login = FALSE WHERE id = ?");
+            $stmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
+            
+            if ($stmt->execute()) {
+                unset($_SESSION['force_password_reset']);
+                echo "<script>alert('Password updated successfully!'); window.location.href='dashboard.php';</script>";
+                exit();
+            } else {
+                $error = "Failed to update password";
+            }
         }
     } else {
-        $error = "Passwords don't match or password too short (minimum 6 characters)";
+        $error = "Passwords don't match or too short (minimum 8 characters)";
     }
 }
 ?>
@@ -64,14 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <?php endif; ?>
         
         <form method="POST">
+            <?= csrf_token() ?>
             <div class="form-group">
                 <label for="new_password">New Password</label>
-                <input type="password" id="new_password" name="new_password" required minlength="6">
+                <input type="password" id="new_password" name="new_password" required minlength="8">
             </div>
             
             <div class="form-group">
                 <label for="confirm_password">Confirm Password</label>
-                <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
+                <input type="password" id="confirm_password" name="confirm_password" required minlength="8">
             </div>
             
             <button type="submit" class="reset-btn">Update Password</button>

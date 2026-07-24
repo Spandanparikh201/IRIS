@@ -6,7 +6,7 @@
 - `admin_dashboard.php` - Full system access dashboard
 - `hod_dashboard.php` - Department-specific dashboard for HOD
 - `teacher_dashboard.php` - Department-specific dashboard for Teacher/Staff
-- `librarian_dashboard.php` - Library-only dashboard for Librarian
+- *(librarian_dashboard.php removed - role removed)*
 
 ### 2. RBAC System Updates
 - Added `ROLE_HOD` constant to rbac.php
@@ -72,7 +72,7 @@
 | `admin_dashboard.php` | Admin dashboard with full system access |
 | `hod_dashboard.php` | HOD dashboard with department-specific access |
 | `teacher_dashboard.php` | Teacher/Staff dashboard with department-specific access |
-| `librarian_dashboard.php` | Librarian dashboard with library-only access |
+| *(librarian_dashboard.php removed)* | *(role removed)* |
 | `update_users_for_hod.sql` | Database migration script |
 | `DASHBOARD_ROLES_DOCUMENTATION.md` | Comprehensive documentation |
 | `DASHBOARD_ROLES_SUMMARY.md` | This file |
@@ -95,7 +95,7 @@ Expected roles:
 - HOD: `hod` (with department)
 - Teacher: `teacher` (with department)
 - Staff: `staff` (with department)
-- Librarian: `librarian` (no department)
+- *(Librarian role removed)*
 
 ### Step 3: Test the System
 1. Login as each role type
@@ -132,7 +132,7 @@ Expected roles:
 - [ ] HOD can access hod_dashboard.php
 - [ ] Teacher can access teacher_dashboard.php
 - [ ] Staff can access teacher_dashboard.php
-- [ ] Librarian can access librarian_dashboard.php
+- [ ] *(Librarian role removed)*
 - [ ] Department filtering works correctly
 - [ ] Navigation shows correct links for each role
 - [ ] Quick actions are role-specific
